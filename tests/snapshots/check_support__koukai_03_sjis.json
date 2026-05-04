@@ -1,6 +1,25 @@
 [
   [
     {
+      "claim": 1,
+      "level": "warning",
+      "milestone": "M6",
+      "missing_nouns": [
+        "第１媒体",
+        "第２媒体"
+      ],
+      "msg": "請求項1：実施形態に未記載の語句: 第１媒体、第２媒体"
+    },
+    {
+      "claim": 2,
+      "level": "warning",
+      "milestone": "M6",
+      "missing_nouns": [
+        "第１媒体"
+      ],
+      "msg": "請求項2：実施形態に未記載の語句: 第１媒体"
+    },
+    {
       "claim": 3,
       "level": "warning",
       "milestone": "M6",
@@ -8,6 +27,25 @@
         "複数の第１媒体"
       ],
       "msg": "請求項3：実施形態に未記載の語句: 複数の第１媒体"
+    },
+    {
+      "claim": 4,
+      "level": "warning",
+      "milestone": "M6",
+      "missing_nouns": [
+        "第１媒体",
+        "第２媒体"
+      ],
+      "msg": "請求項4：実施形態に未記載の語句: 第１媒体、第２媒体"
+    },
+    {
+      "claim": 5,
+      "level": "warning",
+      "milestone": "M6",
+      "missing_nouns": [
+        "第２媒体"
+      ],
+      "msg": "請求項5：実施形態に未記載の語句: 第２媒体"
     },
     {
       "claim": 6,
@@ -90,6 +128,100 @@
       ],
       "in_impl": true,
       "noun": "磁場計測装置"
+    },
+    {
+      "claims": [
+        1
+      ],
+      "in_impl": true,
+      "noun": "第１偏光面"
+    },
+    {
+      "claims": [
+        1,
+        3
+      ],
+      "in_impl": true,
+      "noun": "第１光源"
+    },
+    {
+      "claims": [
+        1,
+        2,
+        4
+      ],
+      "in_impl": false,
+      "noun": "第１媒体"
+    },
+    {
+      "claims": [
+        1
+      ],
+      "in_impl": true,
+      "noun": "第１検出部"
+    },
+    {
+      "claims": [
+        1
+      ],
+      "in_impl": true,
+      "noun": "第２偏光面"
+    },
+    {
+      "claims": [
+        1,
+        6
+      ],
+      "in_impl": true,
+      "noun": "第２光源"
+    },
+    {
+      "claims": [
+        1,
+        4,
+        5
+      ],
+      "in_impl": false,
+      "noun": "第２媒体"
+    },
+    {
+      "claims": [
+        1
+      ],
+      "in_impl": true,
+      "noun": "第２検出部"
+    },
+    {
+      "claims": [
+        1
+      ],
+      "in_impl": true,
+      "noun": "第３偏光面"
+    },
+    {
+      "claims": [
+        1,
+        2,
+        3
+      ],
+      "in_impl": true,
+      "noun": "第３検出部"
+    },
+    {
+      "claims": [
+        1
+      ],
+      "in_impl": true,
+      "noun": "第４偏光面"
+    },
+    {
+      "claims": [
+        1,
+        5,
+        6
+      ],
+      "in_impl": true,
+      "noun": "第４検出部"
     },
     {
       "claims": [

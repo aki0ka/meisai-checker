@@ -93,6 +93,13 @@
       "claims": [
         1
       ],
+      "in_impl": true,
+      "noun": "副走査"
+    },
+    {
+      "claims": [
+        1
+      ],
       "in_impl": false,
       "noun": "反射散乱光"
     },

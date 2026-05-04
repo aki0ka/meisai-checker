@@ -66,8 +66,8 @@ def _is_valid_support_noun(noun):
     # 数詞始まり（「１項」「２つ」等）は除外
     if t0['pos1'] == '数詞':
         return False
-    # 接頭辞始まり（「近距離」等）は除外
-    if t0['pos'] == '接頭辞':
+    # 量化接頭辞（各・毎）のみ除外。不・大・副・主 等は複合語の一部なので除外しない
+    if t0['pos'] == '接頭辞' and t0['surf'] in ('各', '毎'):
         return False
     # STOP_WORDS残留リスト（品詞ルールで拾えない意味的除外語）
     if noun in STOP_WORDS:

@@ -732,7 +732,7 @@ def _parse_fugo_setsumeisho(text):
     for m in re.finditer(
             r'([\uff10-\uff19][\uff10-\uff19a-zA-Z\uff41-\uff5a\uff21-\uff3a\uff0d]*)'
             r'[\u2026\u2025\u30fb\-\uff0d]+'
-            r'([^\u3001\uff0c,\r\n\u3010\u3011\uff10-\uff190-9]{1,30})',
+            r'([^\u3001\uff0c,\r\n\u3010\u3011]{1,30})',
             body):
         fugo = m.group(1).strip()
         name = m.group(2).strip().rstrip('、，,')

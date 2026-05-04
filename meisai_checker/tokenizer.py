@@ -54,11 +54,13 @@ def _tokenize(text):
     return result
 
 def _is_noun_tok(t):
-    """名詞・接頭辞・接尾辞(名詞的) → 名詞句の構成要素"""
+    """名詞・接頭辞・接尾辞(名詞的/形状詞的) → 名詞句の構成要素"""
     p, p1 = t['pos'], t['pos1']
     if p == '名詞':   return True
     if p == '接頭辞': return True
-    if p == '接尾辞' and p1 == '名詞的': return True
+    # 名詞的接尾辞に加え、形状詞的接尾辞（「的」）も名詞句継続として扱う
+    # 例: 「段階的移行プロセス」を分断しないため
+    if p == '接尾辞' and p1 in ('名詞的', '形状詞的'): return True
     return False
 
 def _is_no_tok(t):
@@ -112,6 +114,9 @@ def _is_formal_noun_tok(t):
             return False
         return True
     if p in ('副詞', '形状詞', '感動詞'):
+        # カタカナ形状詞（アクティブ・パッシブ等）は技術的複合語修飾語として除外しない
+        if p == '形状詞' and t['surf'] and all('゠' <= c <= 'ヿ' for c in t['surf']):
+            return False
         return True
     return False
 
@@ -237,10 +242,17 @@ def _noun_span(tokens, start_idx):
         if t['surf'] in _ZENSHOU_WORDS:
             break
         # 形式名詞（うち・とき・こと等）は名詞句の核ではないので停止
+        # ただし直前が接頭辞のときは副詞可能名詞でも継続（不具合・大規模・副波長 等）
         if _is_formal_noun_tok(t):
-            break
+            if not (span and span[-1]['pos'] == '接頭辞'):
+                break
         # 繰り返し接尾辞（ごと・毎・用等）は核名詞の後なので停止
         if t['pos'] == '接尾辞' and t['surf'] in _ITER_SUFFIXES:
+            # 次トークンが名詞なら複合語継続（判定用データ・車両向けシステム等）
+            if i + 1 < n and _is_noun_tok(tokens[i + 1]):
+                span.append(t)
+                i += 1
+                continue
             break
         # 位置接尾辞（内・外・上等）が接尾辞品詞のとき停止
         if t['pos'] == '接尾辞' and t['surf'] in _LOC_SUFFIXES:
@@ -249,6 +261,11 @@ def _noun_span(tokens, start_idx):
         if t['surf'] in _RANGE_SUFFIXES:
             break
         if _is_noun_tok(t):
+            span.append(t)
+            i += 1
+        elif (t['pos'] == '形状詞' and t['surf']
+              and all('゠' <= c <= 'ヿ' for c in t['surf'])):
+            # カタカナ形状詞（アクティブ・パッシブ等）は複合語修飾語として継続
             span.append(t)
             i += 1
         elif _is_no_tok(t):
@@ -297,7 +314,10 @@ def _collect_defined_nouns(tokens):
             skip_span = _noun_span(tokens, i + 1)
             i += 1 + (len(skip_span) if skip_span else 0)
             continue
-        if _is_noun_tok(t):
+        # カタカナ形状詞（アクティブ等）も名詞句の起点として扱う
+        _is_kata_keijo = (t['pos'] == '形状詞' and t['surf']
+                          and all('゠' <= c <= 'ヿ' for c in t['surf']))
+        if _is_noun_tok(t) or _is_kata_keijo:
             span = _noun_span(tokens, i)
             s = _span_to_str(span)
             # 除外条件:
