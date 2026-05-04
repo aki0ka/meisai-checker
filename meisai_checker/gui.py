@@ -130,6 +130,27 @@ class Api:
             import traceback
             return {'error': str(e), 'trace': traceback.format_exc()}
 
+    def save_text_file(self, content: str, default_name: str = 'result.txt') -> dict:
+        """ネイティブ保存ダイアログでテキストファイルを書き出す"""
+        try:
+            windows = webview.windows
+            if not windows:
+                return {'error': 'ウィンドウが見つかりません'}
+            result = windows[0].create_file_dialog(
+                webview.SAVE_DIALOG,
+                save_filename=default_name,
+                file_types=('テキストファイル (*.txt)', '全ファイル (*.*)'),
+            )
+            if not result:
+                return {'cancelled': True}
+            path = result[0] if isinstance(result, (list, tuple)) else result
+            with open(path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            return {'ok': True, 'path': path}
+        except Exception as e:
+            import traceback
+            return {'error': str(e), 'trace': traceback.format_exc()}
+
     def save_setting(self, key: str, value) -> dict:
         """任意の設定値を保存する"""
         _allowed = {'theme', 'always_on_top', 'window_width', 'window_height'}

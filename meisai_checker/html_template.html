@@ -282,6 +282,7 @@ header{height:var(--hdr);display:flex;align-items:center;gap:14px;
     <div id="zoom-indicator" style="font-family:var(--mono);font-size:10px;padding:2px 6px;color:var(--ink3);user-select:none" title="Ctrl+スクロールでフォントサイズ変更">🔍 <span id="zoom-pct">100%</span></div>
     <button class="hb hb-off" id="ontop-btn" title="常に前面表示" onclick="toggleOnTop()" style="font-size:10px;padding:2px 8px;cursor:pointer">📌 前面固定</button>
     <button class="hb hb-off" id="copy-btn" title="結果をMarkdownでコピー" onclick="copyResultsMarkdown()" style="font-size:10px;padding:2px 8px;cursor:pointer;display:none">📋 コピー</button>
+    <button class="hb hb-off" id="download-btn" title="結果をテキストファイルで保存" onclick="downloadResultsTxt()" style="font-size:10px;padding:2px 8px;cursor:pointer;display:none">💾 保存</button>
     <button class="hb hb-off" id="debug-btn" title="デバッグログ" onclick="toggleDebugPanel()" style="font-size:10px;padding:2px 6px;cursor:pointer">🐛</button>
     <button id="update-btn" onclick="openReleasesPage()" style="display:none;font-size:10px;padding:2px 8px;cursor:pointer;background:#2a6;color:#fff;border:none;border-radius:4px" title="GitHubリリースページを開く">🆕 <span id="update-version"></span></button>
   </div>
@@ -421,6 +422,7 @@ function showInputPanel() {
   document.getElementById('viewer-empty').style.display = 'flex';
   document.getElementById('block-area').style.display = 'none';
   document.getElementById('copy-btn').style.display = 'none';
+  document.getElementById('download-btn').style.display = 'none';
   document.getElementById('stats-row').style.display = 'none';
   G.data = null;
 }
@@ -482,6 +484,7 @@ function runAnalyzeFromText(text) {
     (d.blocks || []).forEach(function(b) { G.blockMap[b.id] = b; });
     renderAll(d);
     document.getElementById('copy-btn').style.display = '';
+    document.getElementById('download-btn').style.display = '';
   }).catch(function(e) {
     hideLoading();
     alert('APIエラー: ' + e);
@@ -678,6 +681,54 @@ function copyResultsMarkdown() {
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
+  }
+}
+
+// ── 結果をテキストファイルとして保存 ──
+function downloadResultsTxt() {
+  if (!G.data) return;
+  var d = G.data;
+  var lines = [];
+  lines.push('# 特許明細書チェック結果');
+  lines.push('');
+  if (d.title) lines.push('発明の名称: ' + d.title);
+  var s = d.stats || {};
+  if (s.total_claims) lines.push('請求項数: ' + s.total_claims);
+  lines.push('');
+  var mids = ['m2','m3','m4','m5','m6','m7','m8','tc','g1'];
+  var labels = {m2:'M2 従属関係',m3:'M3 前記・当該',m4:'M4 符号',
+                m5:'M5 構造',m6:'M6 サポート要件',m7:'M7 係り受け曖昧性',m8:'M8 記録項目',
+                tc:'TC 文章形式',g1:'G1 助詞'};
+  mids.forEach(function(mid) {
+    var issues = (d.issues || {})[mid] || [];
+    if (!issues.length) return;
+    lines.push('== ' + (labels[mid] || mid) + ' ==');
+    issues.forEach(function(iss) {
+      var lv = iss.level === 'error' ? '[ERROR]' : iss.level === 'warning' ? '[WARN] ' : '[INFO] ';
+      var loc = iss.claim ? ('請求項' + iss.claim) : (iss.para_id || '');
+      lines.push(lv + (loc ? ' [' + loc + '] ' : ' ') + (iss.msg || ''));
+    });
+    lines.push('');
+  });
+  var content = lines.join('\n');
+  var title = (d.title || 'result').replace(/[\\/:*?"<>|]/g, '_');
+  var filename = 'check_' + title.slice(0, 30) + '.txt';
+  if (window.pywebview) {
+    window.pywebview.api.save_text_file(content, filename).then(function(r) {
+      if (r && r.ok) {
+        var btn = document.getElementById('download-btn');
+        var orig = btn.textContent;
+        btn.textContent = '✓ 保存しました';
+        setTimeout(function() { btn.textContent = orig; }, 2000);
+      }
+    });
+  } else {
+    // ブラウザ環境フォールバック
+    var blob = new Blob([content], {type: 'text/plain;charset=utf-8'});
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
   }
 }
 
