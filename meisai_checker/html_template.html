@@ -151,8 +151,8 @@ header{height:var(--hdr);display:flex;align-items:center;gap:14px;
 .tab .cnt.warn{background:rgba(230,184,74,.3);color:var(--gold)}
 .tab-content{display:none;overflow-y:auto;flex:1;min-height:0}
 .tab-content.active{display:flex;flex-direction:column;flex:1;min-height:0}
-@keyframes fugo-flash-anim{0%{background:rgba(100,200,255,.5)}100%{background:transparent}}
-.fugo-flash{animation:fugo-flash-anim 1.2s ease-out}
+@keyframes fugo-flash-anim{0%{background:rgba(59,130,246,.5)}60%{background:rgba(59,130,246,.25)}100%{background:transparent}}
+.fugo-flash{animation:fugo-flash-anim 2s ease-out}
 .issue-row{padding:11px 14px;border-bottom:1px solid var(--border);
   cursor:pointer;transition:background .12s;display:flex;flex-direction:column;gap:3px;}
 .issue-row:hover{background:var(--surface2)}
@@ -279,7 +279,7 @@ header{height:var(--hdr);display:flex;align-items:center;gap:14px;
       <button class="theme-btn" data-theme="dark" title="ダーク" onclick="applyTheme('dark')">🌙</button>
     </div>
     <button id="br-btn" onclick="toggleLineBreak()" title="元の改行を表示/非表示" style="background:var(--surface2);border:1px solid var(--cyan);color:var(--cyan);cursor:pointer;font-size:11px;padding:2px 8px;border-radius:4px;transition:all .15s">改行</button>
-    <div class="hb hb-off" id="zoom-indicator" style="cursor:default;user-select:none" title="Ctrl+スクロールでフォントサイズ変更">🔍 <span id="zoom-pct">100%</span></div>
+    <div id="zoom-indicator" style="font-family:var(--mono);font-size:10px;padding:2px 6px;color:var(--ink3);user-select:none" title="Ctrl+スクロールでフォントサイズ変更">🔍 <span id="zoom-pct">100%</span></div>
     <button class="hb hb-off" id="ontop-btn" title="常に前面表示" onclick="toggleOnTop()" style="font-size:10px;padding:2px 8px;cursor:pointer">📌 前面固定</button>
     <button class="hb hb-off" id="copy-btn" title="結果をMarkdownでコピー" onclick="copyResultsMarkdown()" style="font-size:10px;padding:2px 8px;cursor:pointer;display:none">📋 コピー</button>
     <button class="hb hb-off" id="newinput-btn" title="新しい文書を入力" onclick="showInputPanel()" style="font-size:10px;padding:2px 8px;cursor:pointer;display:none">＋ 新規入力</button>
@@ -1249,6 +1249,10 @@ function buildFugoTab(con, d) {
               spans[s].scrollIntoView({behavior:'smooth', block:'center'});
               spans[s].classList.add('fugo-flash');
               setTimeout(function(el){ el.classList.remove('fugo-flash'); }, 1200, spans[s]);
+              // 親ブロックに青枠フォーカスを付与（以前のフォーカスを解除してから）
+              document.querySelectorAll('.block.focused').forEach(function(b){ b.classList.remove('focused'); });
+              var blk = spans[s].closest('.block');
+              if (blk) blk.classList.add('focused');
               return;
             }
           }
@@ -1257,7 +1261,11 @@ function buildFugoTab(con, d) {
           if (ftRow && ftRow.para_ids && ftRow.para_ids.length) {
             var pid = ftRow.para_ids[0];
             var el = document.getElementById('view-' + pid);
-            if (el) el.scrollIntoView({behavior:'smooth', block:'start'});
+            if (el) {
+              el.scrollIntoView({behavior:'smooth', block:'start'});
+              document.querySelectorAll('.block.focused').forEach(function(b){ b.classList.remove('focused'); });
+              el.classList.add('focused');
+            }
           }
         }
         // 全ブロック表示でなければ切り替えてから少し待ってジャンプ
