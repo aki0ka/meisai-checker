@@ -16,6 +16,10 @@ import re
 # 連続する「名詞系 の 名詞系 の ...」を追跡する。
 _NO_CHAIN_MIN = 4  # この数以上の「の」連鎖で G1b を発報
 
+# 「の」チェーンを打ち切る形式名詞
+# 「AのBのCのもの」の「もの」はチェーンの終端として扱い、それ以上の連鎖はカウントしない
+_NO_CHAIN_STOP_NOUNS = {'もの', 'こと', 'はず', 'わけ', 'ため', 'とき', 'ところ'}
+
 # G1a で無視する助詞（正常な連続が存在するもの）
 # 例: 「においては」→ に + おい + て + は　（MeCab が分割する）
 # 例: 「たり〜たり」→ 同一助詞（並立助詞）の連続は文法的に正常
@@ -101,12 +105,14 @@ def check_particles(sections: dict) -> list[dict]:
                               and tokens[i-1]["surf"] == "の")
                 if not prev_is_no:
                     # ここから「名詞系 の 名詞系 の ...」の連鎖を数える
+                    # 形式名詞（もの・こと等）は連鎖の終端として扱い、打ち切る
                     no_count = 0
                     j = i + 1
                     while j + 1 < n:
                         if (tokens[j]["pos"] == "助詞"
                                 and tokens[j]["surf"] == "の"
-                                and _is_noun_like(tokens[j + 1])):
+                                and _is_noun_like(tokens[j + 1])
+                                and tokens[j + 1]["surf"] not in _NO_CHAIN_STOP_NOUNS):
                             no_count += 1
                             j += 2
                         else:
