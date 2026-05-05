@@ -647,10 +647,10 @@ function copyResultsMarkdown() {
   if (s.total_claims) lines.push('**請求項数**: ' + s.total_claims);
   lines.push('');
 
-  var mids = ['m2','m3','m4','m5','m6','m7','m8','tc','g1'];
+  var mids = ['m2','m3','m4','m5','m6','m7','m8','m9','tc','g1'];
   var labels = {m2:'M2 従属関係',m3:'M3 前記・当該',m4:'M4 符号',
-                m5:'M5 構造',m6:'M6 サポート要件',m7:'M7 係り受け曖昧性',m8:'M8 記録項目',
-                tc:'TC 文章形式',g1:'G1 助詞'};
+                m5:'M5 構造',m6:'M6 サポート要件',m7:'M7 係り受け曖昧性',
+                m8:'M8 記録項目',m9:'M9 願書',tc:'TC 文章形式',g1:'G1 助詞'};
   mids.forEach(function(mid) {
     var issues = (d.issues || {})[mid] || [];
     if (!issues.length) return;
@@ -695,10 +695,10 @@ function downloadResultsTxt() {
   var s = d.stats || {};
   if (s.total_claims) lines.push('請求項数: ' + s.total_claims);
   lines.push('');
-  var mids = ['m2','m3','m4','m5','m6','m7','m8','tc','g1'];
+  var mids = ['m2','m3','m4','m5','m6','m7','m8','m9','tc','g1'];
   var labels = {m2:'M2 従属関係',m3:'M3 前記・当該',m4:'M4 符号',
-                m5:'M5 構造',m6:'M6 サポート要件',m7:'M7 係り受け曖昧性',m8:'M8 記録項目',
-                tc:'TC 文章形式',g1:'G1 助詞'};
+                m5:'M5 構造',m6:'M6 サポート要件',m7:'M7 係り受け曖昧性',
+                m8:'M8 記録項目',m9:'M9 願書',tc:'TC 文章形式',g1:'G1 助詞'};
   mids.forEach(function(mid) {
     var issues = (d.issues || {})[mid] || [];
     if (!issues.length) return;
@@ -792,10 +792,11 @@ function renderStats(s) {
   }).join('');
 }
 var TAB_DEFS = [
-  {id:'m23', label:'クレーム'},
-  {id:'fugo', label:'符号表'},
-  {id:'m6',  label:'サポート'},
-  {id:'m5',  label:'誤記'},
+  {id:'m23',    label:'クレーム'},
+  {id:'fugo',   label:'符号表'},
+  {id:'m6',     label:'サポート'},
+  {id:'m5',     label:'誤記・記録'},
+  {id:'buntai', label:'文体・文法'},
 ];
 function renderTabs(d) {
   var tabBar = document.getElementById('tabs');
@@ -812,6 +813,14 @@ function renderTabs(d) {
     } else if (def.id === 'fugo') {
       errs  = (d.issues.m4||[]).filter(function(i){return i.level==='error';}).length;
       warns = (d.issues.m4||[]).filter(function(i){return i.level==='warning'||i.level==='style';}).length;
+    } else if (def.id === 'm5') {
+      var m5all = (d.issues.m5||[]).concat(d.issues.m8||[]).concat(d.issues.m9||[]);
+      errs  = m5all.filter(function(i){return i.level==='error';}).length;
+      warns = m5all.filter(function(i){return i.level==='warning'||i.level==='style';}).length;
+    } else if (def.id === 'buntai') {
+      var btall = (d.issues.m7||[]).concat(d.issues.tc||[]).concat(d.issues.g1||[]);
+      errs  = btall.filter(function(i){return i.level==='error';}).length;
+      warns = btall.filter(function(i){return i.level==='warning'||i.level==='style';}).length;
     } else {
       errs  = issues.filter(function(i){return i.level==='error';}).length;
       warns = issues.filter(function(i){return i.level==='warning'||i.level==='style';}).length;
@@ -827,10 +836,11 @@ function renderTabs(d) {
     var con = document.createElement('div');
     con.className = 'tab-content' + (idx===0?' active':'');
     con.id = 'tc-'+def.id;
-    if      (def.id === 'm23')  { buildM23Tab(con, d); }
-    else if (def.id === 'fugo') { buildFugoTab(con, d); }
-    else if (def.id === 'm6')   { buildSupportTab(con, d); }
-    else if (def.id === 'm5')   { buildM5Tab(con, d); }
+    if      (def.id === 'm23')    { buildM23Tab(con, d); }
+    else if (def.id === 'fugo')   { buildFugoTab(con, d); }
+    else if (def.id === 'm6')     { buildSupportTab(con, d); }
+    else if (def.id === 'm5')     { buildM5Tab(con, d); }
+    else if (def.id === 'buntai') { buildBuntaiTab(con, d); }
     else                        { con.innerHTML = buildIssueList(issues, def.id); attachIssueEvents(con, d, def.id); }
     tabCon.appendChild(con);
   });
@@ -1557,6 +1567,8 @@ function escReg(s){
 // ══════════════════════════════════════════
 function buildM5Tab(con, d) {
   var m5issues = d.issues.m5 || [];
+  var m8issues = d.issues.m8 || [];
+  var m9issues = d.issues.m9 || [];
   var title = d.title || '';
   var invTypes = d.title_inv_types || [];
 
@@ -1572,10 +1584,64 @@ function buildM5Tab(con, d) {
 
   var issDiv = document.createElement('div');
   issDiv.style.cssText = 'flex:1;overflow-y:auto';
-  issDiv.innerHTML = m5issues.length
-    ? buildIssueList(m5issues, 'm5')
-    : '<div class="empty" style="padding:24px">✅ 発明の名称に問題は検出されませんでした</div>';
-  attachIssueEvents(issDiv, d, 'm5');
+
+  if (!m5issues.length && !m8issues.length && !m9issues.length) {
+    issDiv.innerHTML = '<div class="empty" style="padding:24px">✅ 問題は検出されませんでした</div>';
+  } else {
+    var m5Div = document.createElement('div');
+    m5Div.innerHTML = m5issues.length ? buildIssueList(m5issues, 'm5') : '';
+    attachIssueEvents(m5Div, d, 'm5');
+    issDiv.appendChild(m5Div);
+
+    if (m8issues.length) {
+      var m8Sep = document.createElement('div');
+      m8Sep.style.cssText = 'padding:6px 14px 2px;font-size:10px;font-family:var(--mono);color:var(--ink3);border-top:1px solid var(--border);margin-top:4px';
+      m8Sep.textContent = 'M8 記録項目';
+      issDiv.appendChild(m8Sep);
+      var m8Div = document.createElement('div');
+      m8Div.innerHTML = buildIssueList(m8issues, 'm8');
+      attachIssueEvents(m8Div, d, 'm8');
+      issDiv.appendChild(m8Div);
+    }
+    if (m9issues.length) {
+      var m9Sep = document.createElement('div');
+      m9Sep.style.cssText = 'padding:6px 14px 2px;font-size:10px;font-family:var(--mono);color:var(--ink3);border-top:1px solid var(--border);margin-top:4px';
+      m9Sep.textContent = 'M9 願書記録項目';
+      issDiv.appendChild(m9Sep);
+      var m9Div = document.createElement('div');
+      m9Div.innerHTML = buildIssueList(m9issues, 'm9');
+      attachIssueEvents(m9Div, d, 'm9');
+      issDiv.appendChild(m9Div);
+    }
+  }
+  con.appendChild(issDiv);
+}
+
+function buildBuntaiTab(con, d) {
+  var sections = [
+    {key: 'm7', label: 'M7 係り受け曖昧性'},
+    {key: 'tc', label: 'TC 文章形式'},
+    {key: 'g1', label: 'G1 助詞'},
+  ];
+  var issDiv = document.createElement('div');
+  issDiv.style.cssText = 'flex:1;overflow-y:auto';
+  var hasAny = false;
+  sections.forEach(function(sec) {
+    var issues = d.issues[sec.key] || [];
+    if (!issues.length) return;
+    hasAny = true;
+    var sep = document.createElement('div');
+    sep.style.cssText = 'padding:6px 14px 2px;font-size:10px;font-family:var(--mono);color:var(--ink3);border-top:1px solid var(--border);margin-top:4px';
+    sep.textContent = sec.label;
+    issDiv.appendChild(sep);
+    var secDiv = document.createElement('div');
+    secDiv.innerHTML = buildIssueList(issues, sec.key);
+    attachIssueEvents(secDiv, d, sec.key);
+    issDiv.appendChild(secDiv);
+  });
+  if (!hasAny) {
+    issDiv.innerHTML = '<div class="empty" style="padding:24px">✅ 問題は検出されませんでした</div>';
+  }
   con.appendChild(issDiv);
 }
 

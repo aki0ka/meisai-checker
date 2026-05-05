@@ -467,16 +467,12 @@ def check_gansho(text: str) -> list[dict[str, Any]]:
             check  : チェック種別 (GA1〜GA12)
             msg    : メッセージ (str)
     """
+    # 願書（特許願）が含まれない場合はスキップ
+    if not re.search(r'【書類名】\s*特許願', text):
+        return []
+
     # 願書部分だけを抽出
     gansho_text = _extract_gansho_section(text)
-
-    # 【書類名】が存在しない場合（願書でないテキスト）
-    if '書類名' not in gansho_text and '発明者' not in gansho_text:
-        return [{
-            'level': 'warning', 'check': 'GA0',
-            'msg': ("特許願の記録項目が見つかりません。"
-                    "「【書類名】特許願」で始まる願書テキストを入力してください。")
-        }]
 
     blocks = _parse_blocks(gansho_text)
     issues: list[dict] = []

@@ -27,7 +27,9 @@ _LEVEL_ORDER = {'error': 0, 'warning': 1, 'style': 2, 'info': 3, 'ok': 4}
 _LEVEL_MARK = {'error': '❌', 'warning': '⚠️ ', 'style': '📝', 'info': 'ℹ️ ', 'ok': '✅'}
 _MS_LABEL = {
     'm2': 'M2 従属関係', 'm3': 'M3 照応詞',
-    'm4': 'M4 符号',    'm5': 'M5 誤記',  'm6': 'M6 サポート',
+    'm4': 'M4 符号',    'm5': 'M5 誤記',    'm6': 'M6 サポート',
+    'm7': 'M7 係り受け曖昧性', 'm8': 'M8 記録項目', 'm9': 'M9 願書',
+    'tc': 'TC 文章形式', 'g1': 'G1 助詞',
 }
 
 
@@ -35,7 +37,7 @@ def _make_summary(result):
     """チェック結果からサマリーを生成する"""
     by_ms = {}
     total_error = total_warning = 0
-    for mid in ('m2', 'm3', 'm4', 'm5', 'm6'):
+    for mid in ('m2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'tc', 'g1'):
         issues = result['issues'][mid]
         e = sum(1 for i in issues if i.get('level') == 'error')
         w = sum(1 for i in issues if i.get('level') == 'warning')
@@ -218,7 +220,7 @@ def main():
                         help='表示するissueのレベル: error / warning / all (default: all)')
     parser.add_argument('--section', metavar='SEC',
                         choices=['all', 'stats', 'claims', 'm2', 'm3', 'm4', 'm5', 'm6',
-                                 'fugo', 'var', 'support'],
+                                 'm7', 'm8', 'm9', 'tc', 'g1', 'fugo', 'var', 'support'],
                         default='all', help='出力するセクション (default: all)')
     parser.add_argument('--normalize-only', action='store_true',
                         help='正規化のみ実行（旧見出し置換・ノイズ除去）。正規化後テキストをstdoutに出力し、警告をstderrに出力する')
@@ -300,6 +302,11 @@ def main():
             if sec in ('all', 'm6', 'support'):
                 out['m6_issues'] = _filter_issues(result['issues']['m6'], lvl)
                 out['support_table'] = result['support_table']
+            if sec == 'all':
+                for mid in ('m7', 'm8', 'm9', 'tc', 'g1'):
+                    iss = result['issues'].get(mid, [])
+                    if iss:
+                        out[f'{mid}_issues'] = _filter_issues(iss, lvl)
 
             print(_json.dumps(out, ensure_ascii=False, indent=2))
 

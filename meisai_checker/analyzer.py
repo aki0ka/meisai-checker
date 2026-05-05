@@ -163,6 +163,13 @@ def analyze(text):
     except Exception:
         m8_issues = []
 
+    # M9: 願書記録項目チェック（【書類名】特許願が含まれる場合のみ）
+    try:
+        from .structure.gansho import check_gansho
+        m9_issues = check_gansho(text)
+    except Exception:
+        m9_issues = []
+
     # TC: 文章形式チェック（Layer 2: MeCab不要、正規表現のみ）
     tc_issues = (check_brackets(sections) +
                  check_repetition(sections) +
@@ -176,7 +183,7 @@ def analyze(text):
     except Exception:
         g1_issues = []
 
-    all_issues = m2_issues + m3_issues + m4_issues + m5_issues + m6_issues + m7_issues + m8_issues + tc_issues + g1_issues
+    all_issues = m2_issues + m3_issues + m4_issues + m5_issues + m6_issues + m7_issues + m8_issues + m9_issues + tc_issues + g1_issues
 
     noun_groups = build_noun_groups(claims, dep_map, ref_hits, m3_issues)
 
@@ -211,6 +218,7 @@ def analyze(text):
             "m6": m6_issues,
             "m7": m7_issues,
             "m8": m8_issues,
+            "m9": m9_issues,
             "tc": tc_issues,
             "g1": g1_issues,
             "all": all_issues,
