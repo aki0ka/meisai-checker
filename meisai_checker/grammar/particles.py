@@ -16,10 +16,6 @@ import re
 # 連続する「名詞系 の 名詞系 の ...」を追跡する。
 _NO_CHAIN_MIN = 4  # この数以上の「の」連鎖で G1b を発報
 
-# 「の」チェーンを打ち切る形式名詞
-# 「AのBのCのもの」の「もの」はチェーンの終端として扱い、それ以上の連鎖はカウントしない
-_NO_CHAIN_STOP_NOUNS = {'もの', 'こと', 'はず', 'わけ', 'ため', 'とき', 'ところ'}
-
 # G1a で無視する助詞（正常な連続が存在するもの）
 # 例: 「においては」→ に + おい + て + は　（MeCab が分割する）
 # 例: 「たり〜たり」→ 同一助詞（並立助詞）の連続は文法的に正常
@@ -64,75 +60,72 @@ def check_particles(sections: dict) -> list[dict]:
     seen: set[tuple] = set()  # 重複抑制
 
     for section_label, text in _extract_sections_text(sections):
-        tokens = _tokenize(text)
-        n = len(tokens)
+        # 改行は段落区切りのため行単位で処理する
+        # 行をまたいだ G1a/G1b は検知しない（行末の「の」と次行頭の「の」は別段落）
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            tokens = _tokenize(line)
+            n = len(tokens)
 
-        i = 0
-        while i < n:
-            tok = tokens[i]
+            i = 0
+            while i < n:
+                tok = tokens[i]
 
-            # ── G1a: 同一助詞の直接連続 ──────────────────────────
-            if tok["pos"] == "助詞" and tok["surf"] not in _G1A_IGNORE_SURF:
-                if i + 1 < n:
-                    nxt = tokens[i + 1]
-                    if (nxt["pos"] == "助詞"
-                            and nxt["surf"] == tok["surf"]
-                            and tok["surf"] not in _G1A_IGNORE_SURF):
-                        surf = tok["surf"]
-                        pos = tok["start"]
-                        key = ("G1a", section_label, surf, pos)
-                        if key not in seen:
-                            seen.add(key)
-                            ctx = _get_context(text, pos, nxt["end"])
-                            issues.append({
-                                "milestone": "G1", "level": "warning",
-                                "msg": (f"助詞「{surf}」が連続しています"
-                                        f"（{section_label}）：「{ctx}」"),
-                                "detail": "同一助詞の直接連続は誤記の可能性があります。",
-                            })
+                # ── G1a: 同一助詞の直接連続 ──────────────────────────
+                if tok["pos"] == "助詞" and tok["surf"] not in _G1A_IGNORE_SURF:
+                    if i + 1 < n:
+                        nxt = tokens[i + 1]
+                        if (nxt["pos"] == "助詞"
+                                and nxt["surf"] == tok["surf"]
+                                and tok["surf"] not in _G1A_IGNORE_SURF):
+                            surf = tok["surf"]
+                            pos = tok["start"]
+                            key = ("G1a", section_label, surf, pos)
+                            if key not in seen:
+                                seen.add(key)
+                                ctx = _get_context(line, pos, nxt["end"])
+                                issues.append({
+                                    "milestone": "G1", "level": "warning",
+                                    "msg": (f"助詞「{surf}」が連続しています"
+                                            f"（{section_label}）：「{ctx}」"),
+                                    "detail": "同一助詞の直接連続は誤記の可能性があります。",
+                                })
 
-            # ── G1b: 「の」の過剰連鎖 ────────────────────────────
-            # トークン列で「名詞系 の 名詞系 の ...」の長さを計測
-            if tok["pos"] == "助詞" and tok["surf"] == "の":
-                # 現在位置から後ろ向きに「の」の連鎖を数える
-                # （連鎖の先頭を探してから数える）
-                # まず先頭まで戻る
-                pass  # 下の先頭検出ブロックで処理
+                # ── G1b: 「の」の過剰連鎖 ────────────────────────────
+                # 連鎖先頭: 名詞系トークンで、前が「の」でない箇所
+                if _is_noun_like(tok):
+                    prev_is_no = (i > 0 and tokens[i-1]["pos"] == "助詞"
+                                  and tokens[i-1]["surf"] == "の")
+                    if not prev_is_no:
+                        # ここから「名詞系 の 名詞系 の ...」の連鎖を数える
+                        no_count = 0
+                        j = i + 1
+                        while j + 1 < n:
+                            if (tokens[j]["pos"] == "助詞"
+                                    and tokens[j]["surf"] == "の"
+                                    and _is_noun_like(tokens[j + 1])):
+                                no_count += 1
+                                j += 2
+                            else:
+                                break
+                        if no_count >= _NO_CHAIN_MIN:
+                            chain_start = tok["start"]
+                            chain_end = tokens[j - 1]["end"] if j > i else tok["end"]
+                            key = ("G1b", section_label, chain_start)
+                            if key not in seen:
+                                seen.add(key)
+                                ctx = _get_context(line, chain_start, chain_end, window=10)
+                                issues.append({
+                                    "milestone": "G1", "level": "info",
+                                    "msg": (f"「の」が{no_count}連続しています"
+                                            f"（{section_label}）：「{ctx}」"),
+                                    "detail": ("「AのBのCのD」が長くなると読みづらくなります。"
+                                               "言い換えや句の組み替えを検討してください。"),
+                                })
 
-            # 連鎖先頭: 名詞系トークンで、前が「の」でない箇所
-            if _is_noun_like(tok):
-                prev_is_no = (i > 0 and tokens[i-1]["pos"] == "助詞"
-                              and tokens[i-1]["surf"] == "の")
-                if not prev_is_no:
-                    # ここから「名詞系 の 名詞系 の ...」の連鎖を数える
-                    # 形式名詞（もの・こと等）は連鎖の終端として扱い、打ち切る
-                    no_count = 0
-                    j = i + 1
-                    while j + 1 < n:
-                        if (tokens[j]["pos"] == "助詞"
-                                and tokens[j]["surf"] == "の"
-                                and _is_noun_like(tokens[j + 1])
-                                and tokens[j + 1]["surf"] not in _NO_CHAIN_STOP_NOUNS):
-                            no_count += 1
-                            j += 2
-                        else:
-                            break
-                    if no_count >= _NO_CHAIN_MIN:
-                        chain_start = tok["start"]
-                        chain_end = tokens[j - 1]["end"] if j > i else tok["end"]
-                        key = ("G1b", section_label, chain_start)
-                        if key not in seen:
-                            seen.add(key)
-                            ctx = _get_context(text, chain_start, chain_end, window=10)
-                            issues.append({
-                                "milestone": "G1", "level": "info",
-                                "msg": (f"「の」が{no_count}連続しています"
-                                        f"（{section_label}）：「{ctx}」"),
-                                "detail": ("「AのBのCのD」が長くなると読みづらくなります。"
-                                           "言い換えや句の組み替えを検討してください。"),
-                            })
-
-            i += 1
+                i += 1
 
     return issues
 
