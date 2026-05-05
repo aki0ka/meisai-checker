@@ -21,6 +21,8 @@ JPO出願手続ガイドライン（https://www.pcinfo.jpo.go.jp/guide/DocGuide.
 import re
 from typing import Any
 
+from ..preprocessor import normalize_obsolete_headings
+
 # ──────────────────────────────────────────────
 # 見出しパターン
 # ──────────────────────────────────────────────
@@ -420,6 +422,82 @@ def _fc12_name_position(headings: list[tuple[str, int]]) -> list[dict]:
 
 
 # ──────────────────────────────────────────────
+# 複数書類ファイル対応
+# ──────────────────────────────────────────────
+
+# 書類の規定順序
+_DOC_ORDER_MAP: dict[str, int] = {
+    '特許願': 0,
+    '実用新案登録願': 0,
+    '明細書': 1,
+    '特許請求の範囲': 2,
+    '実用新案登録請求の範囲': 2,
+    '要約書': 3,
+    '図面': 4,
+}
+
+# 【書類名】行のパターン
+_SHURUI_LINE_PAT = re.compile(r'【書類名】[ 　\t]*(.+)', re.MULTILINE)
+
+
+def _split_by_shurui(text: str) -> list[tuple[str, str]]:
+    """【書類名】を区切りにテキストを (書類名, セクションテキスト) のリストに分割する。"""
+    matches = list(_SHURUI_LINE_PAT.finditer(text))
+    if not matches:
+        return [('', text)]
+    sections = []
+    for i, m in enumerate(matches):
+        name = m.group(1).strip()
+        start = m.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        sections.append((name, text[start:end]))
+    return sections
+
+
+def _fc0_multi_doc(sections: list[tuple[str, str]]) -> list[dict]:
+    """複数書類ファイルの書類間チェック（重複・順序・段落番号の誤配置）。"""
+    issues = []
+
+    # 重複チェック
+    seen: dict[str, int] = {}
+    for name, _ in sections:
+        seen[name] = seen.get(name, 0) + 1
+    for name, cnt in seen.items():
+        if cnt > 1:
+            issues.append({
+                'level': 'error', 'check': 'FC0',
+                'msg': f"【書類名】{name} が{cnt}回出現しています（同種書類の重複は禁止です）。"
+            })
+
+    # 順序チェック（警告止まり）
+    ordered = [(name, _DOC_ORDER_MAP[name]) for name, _ in sections if name in _DOC_ORDER_MAP]
+    for i in range(1, len(ordered)):
+        prev_name, prev_idx = ordered[i - 1]
+        cur_name, cur_idx = ordered[i]
+        if cur_idx < prev_idx:
+            issues.append({
+                'level': 'warning', 'check': 'FC0',
+                'msg': (f"書類の順序：{prev_name}の後に{cur_name}があります"
+                        f"（推奨順序：願書→明細書→特許請求の範囲→要約書）。")
+            })
+
+    # 明細書以外への段落番号混入チェック
+    for name, sec_text in sections:
+        if name == '明細書':
+            continue
+        m = _PARA_NUM_PAT.search(sec_text)
+        if m:
+            num_str = _zenkaku_to_hankaku_num(m.group(1))
+            issues.append({
+                'level': 'error', 'check': 'FC0',
+                'msg': (f"【書類名】{name} 内に段落番号【{num_str}】があります"
+                        f"（段落番号は明細書にのみ使用できます）。")
+            })
+
+    return issues
+
+
+# ──────────────────────────────────────────────
 # メインエントリー
 # ──────────────────────────────────────────────
 
@@ -432,12 +510,47 @@ def check_docfields(text: str) -> list[dict[str, Any]]:
     Returns:
         issues のリスト。各要素は dict:
             level  : 'error' | 'warning' | 'info'
-            check  : チェック種別 (FC1〜FC12)
+            check  : チェック種別 (FC0〜FC12)
             msg    : メッセージ (str)
     """
-    headings = _extract_headings(text)
-    issues: list[dict] = []
+    # 複数書類ファイル（出願形式）の判定
+    shurui_matches = list(_SHURUI_LINE_PAT.finditer(text))
+    if len(shurui_matches) >= 2:
+        sections = _split_by_shurui(text)
+        issues = _fc0_multi_doc(sections)
 
+        meisho_list = [(name, t) for name, t in sections if name == '明細書']
+        if not meisho_list:
+            issues.append({
+                'level': 'warning', 'check': 'FC0',
+                'msg': "【書類名】明細書 が見つかりません。明細書チェックをスキップします。"
+            })
+            return issues
+
+        meisho_text, obs_warns = normalize_obsolete_headings(meisho_list[0][1])
+        for msg in obs_warns:
+            issues.append({'level': 'warning', 'check': 'FC0', 'msg': msg})
+        headings = _extract_headings(meisho_text)
+        issues += _fc1_required(headings)
+        issues += _fc2_order(headings)
+        issues += _fc3_duplicate(headings)
+        issues += _fc4_gaiyou_children(headings)
+        issues += _fc5_sentou_children(headings)
+        issues += _fc6_sequential_nums(meisho_text)
+        issues += _fc7_zumen_consistency(meisho_text, headings)
+        issues += _fc8_block_in_para(meisho_text)
+        issues += _fc9_jissirei_branch(meisho_text)
+        issues += _fc10_para_under_section(meisho_text, headings)
+        issues += _fc11_para_seq(meisho_text)
+        issues += _fc12_name_position(headings)
+        return issues
+
+    # 単一書類（従来の処理）
+    text, obs_warns = normalize_obsolete_headings(text)
+    issues: list[dict] = [
+        {'level': 'warning', 'check': 'FC0', 'msg': msg} for msg in obs_warns
+    ]
+    headings = _extract_headings(text)
     issues += _fc1_required(headings)
     issues += _fc2_order(headings)
     issues += _fc3_duplicate(headings)
@@ -450,5 +563,4 @@ def check_docfields(text: str) -> list[dict[str, Any]]:
     issues += _fc10_para_under_section(text, headings)
     issues += _fc11_para_seq(text)
     issues += _fc12_name_position(headings)
-
     return issues

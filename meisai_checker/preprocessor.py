@@ -95,6 +95,10 @@ def normalize(text: str, source_format: DocFormat = None) -> NormalizedDoc:
         metadata.update(meta)
         warnings.extend(warns)
 
+    # 旧様式見出しの正規化（共通）
+    text, obs_warns = normalize_obsolete_headings(text)
+    warnings.extend(obs_warns)
+
     return NormalizedDoc(
         text=text,
         detected_format=source_format,
@@ -138,10 +142,36 @@ def _normalize_jplatpat(text: str) -> tuple:
     # (NN)プレフィックスの除去: (54)【発明の名称】→ 【発明の名称】
     text = re.sub(r'\(\d+\)\s*【', '【', text)
 
-    # 【明細書】→ 除去（出願時フォーマットには不要）
+    # web公報固有のラッパー見出しを除去（出願様式には存在しない）
     text = re.sub(r'^【明細書】\s*$', '', text, flags=re.MULTILINE)
+    text = re.sub(r'^【発明の詳細な説明】\s*$', '', text, flags=re.MULTILINE)
 
     return text, metadata, warnings
+
+
+# ── 旧様式見出しの正規化（共通） ──────────────────────────────
+
+# 旧見出し → 現行見出しのマッピング（改正年次順）
+_OBSOLETE_HEADINGS: dict[str, str] = {
+    '発明の実施の形態':             '発明を実施するための形態',   # H14以前
+    '発明を実施するための最良の形態': '発明を実施するための形態',   # H14〜H21
+    '発明の開示':                   '発明の概要',                # H21以前
+}
+
+
+def normalize_obsolete_headings(text: str) -> tuple[str, list[str]]:
+    """旧様式の記録項目見出しを現行様式に置換する。
+
+    Returns:
+        (置換後テキスト, 警告メッセージのリスト)
+    """
+    warnings = []
+    for old, new in _OBSOLETE_HEADINGS.items():
+        pat = re.compile(r'【' + re.escape(old) + r'】')
+        if pat.search(text):
+            text = pat.sub(f'【{new}】', text)
+            warnings.append(f"【{old}】を【{new}】に置換しました（旧様式の見出しです）。")
+    return text, warnings
 
 
 # ── 出願時フォーマット固有の正規化 ──────────────────────────────

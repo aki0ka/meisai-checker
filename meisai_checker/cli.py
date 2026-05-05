@@ -196,6 +196,10 @@ def main():
 
   HTML形式レポート生成（ブラウザで表示）:
     python -m meisai_checker.cli -f 明細書.txt --html
+
+  正規化のみ（旧見出し置換・ノイズ除去）:
+    python -m meisai_checker.cli -f 明細書.txt --normalize-only
+    python -m meisai_checker.cli -f 明細書.txt --normalize-only > normalized.txt
         """,
     )
 
@@ -216,6 +220,8 @@ def main():
                         choices=['all', 'stats', 'claims', 'm2', 'm3', 'm4', 'm5', 'm6',
                                  'fugo', 'var', 'support'],
                         default='all', help='出力するセクション (default: all)')
+    parser.add_argument('--normalize-only', action='store_true',
+                        help='正規化のみ実行（旧見出し置換・ノイズ除去）。正規化後テキストをstdoutに出力し、警告をstderrに出力する')
 
     args = parser.parse_args()
 
@@ -236,6 +242,14 @@ def main():
         }
         source_fmt = fmt_map.get(args.format, None)
         norm_doc = normalize(raw_text, source_format=source_fmt)
+
+        # 正規化のみモード
+        if args.normalize_only:
+            for w in norm_doc.warnings:
+                print(f'[警告] {w}', file=_sys.stderr)
+            print(f'[検出フォーマット] {norm_doc.detected_format.value}', file=_sys.stderr)
+            _sys.stdout.write(norm_doc.text)
+            return
 
         # 解析実行
         result = analyze(norm_doc.text)
