@@ -167,7 +167,7 @@ def analyze(text):
     tc_issues = (check_brackets(sections) +
                  check_repetition(sections) +
                  check_style(sections) +
-                 check_length(sections))
+                 check_length(_raw_sections))
 
     # G1: 文法チェック（Layer 5: MeCab必須）
     try:

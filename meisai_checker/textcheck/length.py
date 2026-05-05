@@ -22,6 +22,15 @@ _PARA_NUM_PAT = re.compile(r'【(\d{4,5})】(.*?)(?=【\d{4,5}】|【[^０-９0-
 # 見出し行パターン
 _HEADING_PAT = re.compile(r'^【[^】\d][^】]*】\s*$')
 
+# 対象セクション: 【発明を実施するための形態】およびその旧式・実施例バリアント
+_IMPL_PAT = re.compile(
+    r'【(?:発明を実施するための(?:最良の)?形態'
+    r'|発明の実施の形態'
+    r'|実施(?:形態)?[０-９0-9]*'
+    r')】(.*?)(?=\n【[^\d０-９】][^】]*】|\Z)',
+    re.DOTALL,
+)
+
 
 def _split_sentences(text):
     """句点「。」で文を分割。段落番号・改行を正規化して返す。"""
@@ -43,7 +52,11 @@ def check_length(sections, max_chars=DEFAULT_MAX_CHARS):
     """
     issues = []
 
-    desc = sections.get("description", "")
+    # 【発明を実施するための形態】のみを対象とする
+    # 符号の説明・図面の説明等は文が長くなる構造のため除外
+    raw = sections.get("_raw", "") or sections.get("description", "")
+    impl_parts = _IMPL_PAT.findall(raw)
+    desc = '\n'.join(impl_parts)
     if not desc:
         return issues
 
