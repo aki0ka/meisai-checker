@@ -360,7 +360,10 @@ def _fc9_jissirei_branch(text: str) -> list[dict]:
 def _fc10_para_under_section(text: str, headings: list[tuple[str, int]]) -> list[dict]:
     """段落番号が必要な項目の直下に段落番号があるか確認する。"""
     issues = []
-    heading_positions = {h: pos for h, pos in headings}
+    _para_num_label = re.compile(r'^[0-9０-９]{4,5}$')
+    # 段落番号ラベル（【０００１】等）を除いたセクション見出しのみ使う
+    section_headings = [(h, pos) for h, pos in headings if not _para_num_label.match(h)]
+    heading_positions = {h: pos for h, pos in section_headings}
 
     for section in _NEEDS_PARA:
         if section not in heading_positions:
@@ -368,7 +371,7 @@ def _fc10_para_under_section(text: str, headings: list[tuple[str, int]]) -> list
         sec_pos = heading_positions[section]
         # 次の見出しまでの範囲
         next_pos = len(text)
-        for h, pos in headings:
+        for h, pos in section_headings:
             if pos > sec_pos:
                 next_pos = pos
                 break
