@@ -52,7 +52,7 @@ def check_particles(sections: dict) -> list[dict]:
     戻り値: issue dict のリスト
     """
     try:
-        from ..tokenizer import _tokenize
+        from ..tokenizer import _tokenize, _is_formal_noun_tok
     except Exception:
         return []
 
@@ -108,6 +108,9 @@ def check_particles(sections: dict) -> list[dict]:
                                     and _is_noun_like(tokens[j + 1])):
                                 no_count += 1
                                 j += 2
+                                # 形式名詞（もの・こと等）で終端：「ものの」等の接続的用法で打ち切る
+                                if _is_formal_noun_tok(tokens[j - 1]):
+                                    break
                             else:
                                 break
                         if no_count >= _NO_CHAIN_MIN:
