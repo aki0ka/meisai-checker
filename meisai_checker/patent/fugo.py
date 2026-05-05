@@ -222,6 +222,11 @@ def _collect_fugo_suffix(tokens, start_idx):
     if j < n and tokens[j]['surf'] in ('．', '.'):
         return [], j
 
+    # 単位記号が続く場合は数値表現として符号ではない（濃度１０％、角度３６０度等）
+    _UNIT_AFTER_DIGITS = frozenset({'度', '％', '℃', '°'})
+    if j < n and tokens[j]['surf'] in _UNIT_AFTER_DIGITS:
+        return [], j
+
     # ハイフン付きサフィックス: 全角数詞の後に「－」＋数詞/名詞
     # 例: １００３－１, １００３－ｎ, １００１－Ａ
     if (j + 1 < n
@@ -247,12 +252,24 @@ def _collect_fugo_suffix(tokens, start_idx):
                 and next_tok['pos1'] != '数詞'
                 and next_surf not in _alpha_allow_next):
             # 次が名詞の場合はスキップ（要素名扱い）
+            # ただしメトリクス接頭辞（ｍ→ｍＡｈ等）の場合は単位連鎖として全体を破棄
+            _METRIC_PREFIX = frozenset({'ｋ', 'ｍ', 'μ', 'ｎ', 'ｐ'})
+            if tokens[j]['surf'] in _METRIC_PREFIX:
+                return [], j
             pass
         else:
+            # SI単位記号（Ｗ: ワット、Ｖ: ボルト等）は図面符号サフィックスではない
+            _SI_UNIT_ALPHA = frozenset({'Ｗ', 'Ｖ', 'Ｊ', 'Ｎ', 'Ｆ'})
+            if tokens[j]['surf'] in _SI_UNIT_ALPHA:
+                return [], j
             fugo_parts.append(tokens[j]['surf'])
             j += 1
     elif j < n and _is_noun_tok(tokens[j]) and tokens[j]['pos1'] != '数詞' and tokens[j]['pos'] != '接尾辞':
-        # 名詞が来た場合もスキップ（次の要素名扱い）
+        # 名詞が来た場合はスキップ（次の要素名扱い）
+        # ただし全角英字2文字以上の名詞（ｍＡｈ・ｋＷｈ等の単位略称）は全体を破棄
+        nxt_s = tokens[j]['surf']
+        if len(nxt_s) >= 2 and all(_is_zenkaku_alpha(c) for c in nxt_s):
+            return [], j
         pass
 
     return fugo_parts, j
@@ -452,6 +469,13 @@ def _extract_elements_tokens(text):
                         break
                     j += 1
 
+                # 接尾辞（口・物・体・器・面等）が直後に符号を伴う場合は要素名に取り込む
+                # 例: 吸入口２２１ → 吸入(名詞)+口(接尾辞)+２２１ → 「吸入口」として抽出
+                if (j < n
+                        and tokens[j]['pos'] == '接尾辞'
+                        and j + 1 < n and _is_fugo_tok(tokens[j + 1])):
+                    j += 1
+
                 if j < n and _is_fugo_tok(tokens[j]):
                     noun_toks_raw = tokens[i:j]
                     # 量化/序列修飾語を正規化
@@ -470,7 +494,7 @@ def _extract_elements_tokens(text):
                     if not (_is_fugo_exclude(core_name, noun_toks)
                             or _is_koho_name(core_name)
                             or _is_koho_name_part(core_name)
-                            or len(core_name) < 2):
+                            or len(core_name) < 1):
                         fugo_parts, j = _collect_fugo_suffix(tokens, j)
                         fugo = ''.join(fugo_parts)
                         if classify_fugo(fugo) == 'drawing':

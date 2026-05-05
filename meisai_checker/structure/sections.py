@@ -177,7 +177,7 @@ def check_structure(text):
             seen_headings[label] = lineno
 
     # ── 段落番号の配置チェック（4分類に基づく） ──
-    para_pat = re.compile(r'^【\d{4,5}】')
+    para_pat = re.compile(r'^[　\s]*【\d{4,5}】')
 
     # 旧式の見出し確認
     for _roushiki_label, _roushiki_since in [
@@ -249,7 +249,7 @@ def check_para_nums(text):
             in_abstract = False
         if in_abstract:
             continue
-        m = re.match(r'^【(\d{4,5})】', stripped)
+        m = re.match(r'^[　\s]*【(\d{4,5})】', stripped)
         if m:
             entries.append((i, int(m.group(1))))
 
