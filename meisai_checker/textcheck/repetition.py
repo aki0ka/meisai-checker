@@ -104,6 +104,9 @@ def check_repetition(sections):
                 # 「のの」は③でカバー済み
                 if repeated == 'の':
                     continue
+                # 半角英字のみ（括弧内英語 "determining"→"inin" 等の誤検知防止）
+                if re.match(r'^[a-zA-Z]+$', repeated):
+                    continue
                 issues.append({
                     "milestone": "TC2", "level": "info",
                     "msg": f"語句が直接繰り返されています：「{m.group(0)}」（{section_name}）",

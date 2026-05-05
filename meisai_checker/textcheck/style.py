@@ -76,8 +76,10 @@ def check_style(sections):
             body = _PARA_NUM_PAT.sub('', stripped).strip()
             if len(body) < 4:
                 continue
+            # 「」内のセリフ・UIメッセージは常体チェック対象外
+            body_check = re.sub(r'「[^」]*」', '', body)
 
-            for m in _KEITAL_SENTENCE_PAT.finditer(body):
+            for m in _KEITAL_SENTENCE_PAT.finditer(body_check):
                 snippet = m.group(0).strip()[:40]
                 key = (section_name, snippet)
                 if key in seen:
