@@ -22,8 +22,8 @@ _ANAPHOR_WORDS = ['前記', '上記', '当該', '該']
 # 句読点の連続パターン（全角・半角混在対応）
 _PUNCT_REPEAT_PAT = re.compile(r'([。、，．]{2,}|[,\.]{2,})')
 
-# 助詞「の」の連続
-_NO_REPEAT_PAT = re.compile(r'のの+')
+# 助詞「の」の連続（「ものの」等の接続助詞用法を除外: "もの"の末字"の"の直後は除く）
+_NO_REPEAT_PAT = re.compile(r'(?<!も)のの+')
 
 # 照応詞の連続
 _ANAPHOR_REPEAT_PAT = re.compile(
@@ -35,14 +35,20 @@ _HEADING_LINE_PAT = re.compile(r'^【[^】]+】\s*$', re.MULTILINE)
 _PARA_NUM_PAT = re.compile(r'^【\d{4,5}】', re.MULTILINE)
 
 
+_PARA_ID_PAT = re.compile(r'^【(\d{4,5})】')
+
 def _iter_text_lines(text):
-    """見出し行を除いたテキスト行のイテレータ。行番号(1始まり)と行テキストを返す。"""
+    """見出し行を除いたテキスト行のイテレータ。(lineno, line, para_id) を返す。"""
+    current_para = None
     for lineno, line in enumerate(text.splitlines(), 1):
         stripped = line.strip()
+        m = _PARA_ID_PAT.match(stripped)
+        if m:
+            current_para = 'p-' + m.group(1)
         # 見出し行（【...】のみ）はスキップ
         if _HEADING_LINE_PAT.match(stripped):
             continue
-        yield lineno, line
+        yield lineno, line, current_para
 
 
 def check_repetition(sections):
@@ -63,35 +69,35 @@ def check_repetition(sections):
     for section_name, text in targets:
         if not text:
             continue
-        for lineno, line in _iter_text_lines(text):
+        for lineno, line, para_id in _iter_text_lines(text):
             # 段落番号部分は除外
             body = _PARA_NUM_PAT.sub('', line).strip()
             if not body:
                 continue
 
+            def _iss(level, msg, detail):
+                d = {"milestone": "TC2", "level": level, "msg": msg, "detail": detail}
+                if para_id:
+                    d["para_id"] = para_id
+                return d
+
             # ① 句読点の連続
             for m in _PUNCT_REPEAT_PAT.finditer(body):
-                issues.append({
-                    "milestone": "TC2", "level": "warning",
-                    "msg": f"句読点が連続しています：「{m.group(0)}」（{section_name}）",
-                    "detail": body[max(0, m.start()-10):m.end()+10].strip(),
-                })
+                issues.append(_iss("warning",
+                    f"句読点が連続しています：「{m.group(0)}」（{section_name}）",
+                    body[max(0, m.start()-10):m.end()+10].strip()))
 
             # ② 「の」の連続
             for m in _NO_REPEAT_PAT.finditer(body):
-                issues.append({
-                    "milestone": "TC2", "level": "info",
-                    "msg": f"「の」が連続しています：「{m.group(0)}」（{section_name}）",
-                    "detail": body[max(0, m.start()-10):m.end()+10].strip(),
-                })
+                issues.append(_iss("info",
+                    f"「の」が連続しています：「{m.group(0)}」（{section_name}）",
+                    body[max(0, m.start()-10):m.end()+10].strip()))
 
             # ③ 照応詞の連続
             for m in _ANAPHOR_REPEAT_PAT.finditer(body):
-                issues.append({
-                    "milestone": "TC2", "level": "warning",
-                    "msg": f"照応詞が連続しています：「{m.group(0)}」（{section_name}）",
-                    "detail": body[max(0, m.start()-10):m.end()+10].strip(),
-                })
+                issues.append(_iss("warning",
+                    f"照応詞が連続しています：「{m.group(0)}」（{section_name}）",
+                    body[max(0, m.start()-10):m.end()+10].strip()))
 
             # ④ 同一語の直接反復（2文字以上の語が直接繰り返される）
             # 例: 「センサセンサ」「データデータ」
@@ -107,10 +113,8 @@ def check_repetition(sections):
                 # 半角英字のみ（括弧内英語 "determining"→"inin" 等の誤検知防止）
                 if re.match(r'^[a-zA-Z]+$', repeated):
                     continue
-                issues.append({
-                    "milestone": "TC2", "level": "info",
-                    "msg": f"語句が直接繰り返されています：「{m.group(0)}」（{section_name}）",
-                    "detail": body[max(0, m.start()-5):m.end()+5].strip(),
-                })
+                issues.append(_iss("info",
+                    f"語句が直接繰り返されています：「{m.group(0)}」（{section_name}）",
+                    body[max(0, m.start()-5):m.end()+5].strip()))
 
     return issues

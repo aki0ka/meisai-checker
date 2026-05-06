@@ -12,6 +12,10 @@ from __future__ import annotations
 
 import re
 
+_PARA_ID_PAT = re.compile(r'^【(\d{4,5})】')
+_HEADING_LINE_PAT = re.compile(r'^【[^】]+】\s*$')
+_PARA_NUM_PAT = re.compile(r'^【\d{4,5}】')
+
 # 助詞「の」のみで構成される連鎖を数えるため、
 # 連続する「名詞系 の 名詞系 の ...」を追跡する。
 _NO_CHAIN_MIN = 4  # この数以上の「の」連鎖で G1b を発報
@@ -62,8 +66,15 @@ def check_particles(sections: dict) -> list[dict]:
     for section_label, text in _extract_sections_text(sections):
         # 改行は段落区切りのため行単位で処理する
         # 行をまたいだ G1a/G1b は検知しない（行末の「の」と次行頭の「の」は別段落）
-        for line in text.splitlines():
-            line = line.strip()
+        current_para = None
+        for raw_line in text.splitlines():
+            stripped = raw_line.strip()
+            m = _PARA_ID_PAT.match(stripped)
+            if m:
+                current_para = 'p-' + m.group(1)
+            if _HEADING_LINE_PAT.match(stripped) or not stripped:
+                continue
+            line = _PARA_NUM_PAT.sub('', stripped).strip()
             if not line:
                 continue
             tokens = _tokenize(line)
@@ -86,12 +97,15 @@ def check_particles(sections: dict) -> list[dict]:
                             if key not in seen:
                                 seen.add(key)
                                 ctx = _get_context(line, pos, nxt["end"])
-                                issues.append({
+                                iss = {
                                     "milestone": "G1", "level": "warning",
                                     "msg": (f"助詞「{surf}」が連続しています"
                                             f"（{section_label}）：「{ctx}」"),
                                     "detail": "同一助詞の直接連続は誤記の可能性があります。",
-                                })
+                                }
+                                if current_para:
+                                    iss["para_id"] = current_para
+                                issues.append(iss)
 
                 # ── G1b: 「の」の過剰連鎖 ────────────────────────────
                 # 連鎖先頭: 名詞系トークンで、前が「の」でない箇所
@@ -128,13 +142,16 @@ def check_particles(sections: dict) -> list[dict]:
                             if key not in seen:
                                 seen.add(key)
                                 ctx = _get_context(line, chain_start, chain_end, window=10)
-                                issues.append({
+                                iss = {
                                     "milestone": "G1", "level": "info",
                                     "msg": (f"「の」が{no_count}連続しています"
                                             f"（{section_label}）：「{ctx}」"),
                                     "detail": ("「AのBのCのD」が長くなると読みづらくなります。"
                                                "言い換えや句の組み替えを検討してください。"),
-                                })
+                                }
+                                if current_para:
+                                    iss["para_id"] = current_para
+                                issues.append(iss)
 
                 i += 1
 

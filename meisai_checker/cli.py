@@ -370,7 +370,7 @@ def main():
                     lvl_val = iss.get('level', '?')
                     mark = _LEVEL_MARK.get(lvl_val, '  ')
                     print(f"  {mark} {iss.get('msg', '')}")
-                    if args.verbose and iss.get('detail'):
+                    if iss.get('detail'):
                         print(f"      {iss['detail']}")
 
             # 符号テーブル（-v のとき）
