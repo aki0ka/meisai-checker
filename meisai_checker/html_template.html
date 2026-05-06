@@ -1788,13 +1788,22 @@ function selectIssue(iss, rowIdx, mid) {
   }, 50);
 }
 
+function paraIdLabel(pid) {
+  if (!pid) return '';
+  var num = pid.replace(/^p-/, '');
+  var fw = num.replace(/[0-9]/g, function(c) {
+    return String.fromCharCode(c.charCodeAt(0) + 0xFF10 - 0x30);
+  });
+  return '【' + fw + '】';
+}
 function buildIssueList(issues, mid) {
   if(!issues||!issues.length) return '<div class="empty">✅ 問題は検出されませんでした</div>';
   return issues.map(function(iss,i){
     var lv=iss.level||'warning';
     var claim=iss.claim?'<span class="iss-claim">請求項'+iss.claim+'</span>':'';
+    var para=iss.para_id?'<span class="iss-claim">'+paraIdLabel(iss.para_id)+'</span>':'';
     return '<div class="issue-row lv-'+lv+'" data-idx="'+i+'" data-mid="'+mid+'" data-level="'+lv+'">' +
-      '<div class="iss-head"><span class="iss-lv">'+lvLabel(lv)+'</span>'+claim+'</div>' +
+      '<div class="iss-head"><span class="iss-lv">'+lvLabel(lv)+'</span>'+claim+para+'</div>' +
       '<div class="iss-msg">'+esc(iss.msg)+'</div>' +
       (iss.detail?'<div class="iss-detail">'+esc(iss.detail)+'</div>':'') +
       '</div>';

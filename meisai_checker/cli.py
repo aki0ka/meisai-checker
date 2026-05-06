@@ -25,6 +25,15 @@ from .preprocessor import DocFormat, normalize
 
 _LEVEL_ORDER = {'error': 0, 'warning': 1, 'style': 2, 'info': 3, 'ok': 4}
 _LEVEL_MARK = {'error': '❌', 'warning': '⚠️ ', 'style': '📝', 'info': 'ℹ️ ', 'ok': '✅'}
+
+_H2F_DIGIT = str.maketrans('0123456789', '０１２３４５６７８９')
+
+def _para_id_label(para_id: str) -> str:
+    """'p-0141' → '【０１４１】 '（表示用）。para_id がなければ空文字。"""
+    if not para_id:
+        return ''
+    num = para_id.removeprefix('p-').translate(_H2F_DIGIT)
+    return f'【{num}】 '
 _MS_LABEL = {
     'm2': 'M2 従属関係', 'm3': 'M3 照応詞',
     'm4': 'M4 符号',    'm5': 'M5 誤記',    'm6': 'M6 サポート',
@@ -369,7 +378,8 @@ def main():
                 for iss in misissues:
                     lvl_val = iss.get('level', '?')
                     mark = _LEVEL_MARK.get(lvl_val, '  ')
-                    print(f"  {mark} {iss.get('msg', '')}")
+                    loc = _para_id_label(iss.get('para_id', ''))
+                    print(f"  {mark}{loc} {iss.get('msg', '')}")
                     if iss.get('detail'):
                         print(f"      {iss['detail']}")
 
