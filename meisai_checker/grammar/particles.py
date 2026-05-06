@@ -108,11 +108,19 @@ def check_particles(sections: dict) -> list[dict]:
                                     and _is_noun_like(tokens[j + 1])):
                                 no_count += 1
                                 j += 2
-                                # 形式名詞（もの・こと等）で終端：「ものの」等の接続的用法で打ち切る
-                                if _is_formal_noun_tok(tokens[j - 1]):
-                                    break
                             else:
                                 break
+                        # 「ものの、」等の接続用法の補正:
+                        # 最後に加えた語が形式名詞（もの・こと等）で、
+                        # その直後の「の」が名詞を伴わない → 接続助詞的用法なので除外
+                        if (no_count > 0
+                                and _is_formal_noun_tok(tokens[j - 1])
+                                and j < n
+                                and tokens[j]["pos"] == "助詞"
+                                and tokens[j]["surf"] == "の"
+                                and (j + 1 >= n
+                                     or not _is_noun_like(tokens[j + 1]))):
+                            no_count -= 1
                         if no_count >= _NO_CHAIN_MIN:
                             chain_start = tok["start"]
                             chain_end = tokens[j - 1]["end"] if j > i else tok["end"]
