@@ -22,9 +22,6 @@ _ANAPHOR_WORDS = ['前記', '上記', '当該', '該']
 # 句読点の連続パターン（全角・半角混在対応）
 _PUNCT_REPEAT_PAT = re.compile(r'([。、，．]{2,}|[,\.]{2,})')
 
-# 助詞「の」の連続（「ものの」等の接続助詞用法を除外: "もの"の末字"の"の直後は除く）
-_NO_REPEAT_PAT = re.compile(r'(?<!も)のの+')
-
 # 照応詞の連続
 _ANAPHOR_REPEAT_PAT = re.compile(
     r'(前記|上記|当該){2,}'
@@ -87,27 +84,20 @@ def check_repetition(sections):
                     f"句読点が連続しています：「{m.group(0)}」（{section_name}）",
                     body[max(0, m.start()-10):m.end()+10].strip()))
 
-            # ② 「の」の連続
-            for m in _NO_REPEAT_PAT.finditer(body):
-                issues.append(_iss("info",
-                    f"「の」が連続しています：「{m.group(0)}」（{section_name}）",
-                    body[max(0, m.start()-10):m.end()+10].strip()))
-
-            # ③ 照応詞の連続
+            # ② 照応詞の連続
             for m in _ANAPHOR_REPEAT_PAT.finditer(body):
                 issues.append(_iss("warning",
                     f"照応詞が連続しています：「{m.group(0)}」（{section_name}）",
                     body[max(0, m.start()-10):m.end()+10].strip()))
 
-            # ④ 同一語の直接反復（2文字以上の語が直接繰り返される）
+            # ③ 同一語の直接反復（2文字以上の語が直接繰り返される）
             # 例: 「センサセンサ」「データデータ」
-            # 正規表現: (.{2,8})\1（欲張りマッチで短い方から試す）
             for m in re.finditer(r'(.{2,6})\1', body):
                 repeated = m.group(1)
                 # 数字のみ・記号のみ・空白のみは除外
                 if re.match(r'^[０-９0-9\s　]+$', repeated):
                     continue
-                # 「のの」は③でカバー済み
+                # 「のの」は G1a（MeCab）でカバーするため除外
                 if repeated == 'の':
                     continue
                 # 半角英字のみ（括弧内英語 "determining"→"inin" 等の誤検知防止）
