@@ -56,6 +56,13 @@ from .textcheck.brackets import check_brackets
 from .textcheck.repetition import check_repetition
 from .textcheck.style import check_style
 from .textcheck.length import check_length
+from .patent.subcombination import (  # noqa: F401
+    check_subcombination,
+    extract_combination_elements,
+    extract_zenshou_nouns,
+    noun_matches,
+    has_selective_limitation,
+)
 
 
 # ══════════════════════════════════════════════════════════
@@ -130,7 +137,8 @@ def analyze(text):
             })
 
     # 各チェック実行
-    m2_issues = check_dependency(claims, dep_map, kinds)
+    m2b_issues = check_subcombination(claims, dep_map, kinds)
+    m2_issues = check_dependency(claims, dep_map, kinds) + m2b_issues
     m3_issues = check_zenshou(claims, dep_map)
     m4_issues, element_table, fugo_table, var_table = check_fugo(claims, sections)
     setsu_issues, setsu_table = check_fugo_setsumeisho(fugo_table, text)
@@ -149,10 +157,15 @@ def analyze(text):
     m5_issues = struct_issues + para_issues + abstract_issues + midashi_issues + kuten_issues + jis_issues + m5_issues + ref_num_issues
     m6_issues, support_table = check_support(claims, sections)
 
-    # M7: 係り受け曖昧性チェック（遅延インポートで依存を分離）
+    # M7: 明確性要件チェック（係り受け曖昧性・曖昧表現・非技術的事項）
     try:
         from .patent.ambiguity import check_ambiguity
-        m7_issues = check_ambiguity(claims)
+        from .patent.clarity import check_vague_range, check_nontechnical
+        m7_issues = (
+            check_ambiguity(claims)
+            + check_vague_range(claims, kinds)
+            + check_nontechnical(claims)
+        )
     except Exception:
         m7_issues = []
 
@@ -212,6 +225,7 @@ def analyze(text):
         "ref_hits":         ref_hits,
         "issues": {
             "m2": m2_issues,
+            "m2b": m2b_issues,
             "m3": m3_issues,
             "m4": m4_issues,
             "m5": m5_issues,

@@ -24,7 +24,7 @@
 | M4 | check_fugo | patent/fugo.py | 符号・変数記号と要素名の対応 |
 | M5 | check_structure 等 | structure/sections.py 等 | JIS Z 8301準拠・段落番号・句読点・見出し |
 | M6 | check_support | patent/support.py | サポート要件（請求項の用語が詳細説明にあるか） |
-| M7 | check_ambiguity | patent/ambiguity.py | 係り受け曖昧性（AまたはBのC等） |
+| M7 | check_ambiguity, check_vague_range, check_nontechnical | patent/ambiguity.py, patent/clarity.py | 係り受け曖昧性・曖昧表現（約・適宜・好ましくは等）・非技術的事項（企業名・販売地域等） |
 | M8 | check_docfields | structure/docfields.py | 明細書記録項目・様式第29 |
 | M9 | check_gansho | structure/gansho.py | 願書記録項目・様式第26 |
 | TC1 | check_brackets | textcheck/brackets.py | 括弧対応の整合性 |
@@ -68,6 +68,7 @@ meisai_checker/
     title.py             ← check_title
     support.py           ← check_support
     ambiguity.py         ← check_ambiguity（旧 m7_ambiguity.py）
+    clarity.py           ← check_vague_range（曖昧表現）, check_nontechnical（非技術的事項）
   grammar/
     particles.py         ← check_particles（G1）
 main.py                  ← GUI起動エントリポイント
