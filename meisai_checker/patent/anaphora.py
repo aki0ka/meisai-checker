@@ -69,20 +69,31 @@ def check_zenshou(claims, dep_map):
             if t['surf'] == '該' and i > 0 and tokens[i-1]['surf'] == '当':
                 continue
 
-            noun, *_ = _noun_after_zenshou(tokens, i)
+            noun, noun_start, _noun_end = _noun_after_zenshou(tokens, i)
             if not noun or len(noun) < 2:
                 continue
+
+            zenshou_end = tokens[i]['end']
+            verb_modified = noun_start > zenshou_end  # 「前記AしたB」パターン
 
             prefix = tokens[:i]  # 同一請求項の前方
 
             if t['surf'] in _TOUGAI_WORDS:
                 # 当該・該：同一請求項の前方のみ
-                scope_tokens = prefix
-                found = _found_in_scope(noun, scope_tokens)
+                found = _found_in_scope(noun, prefix)
             else:
                 # 前記・上記
                 # まず同一請求項の前方で見つかれば常にOK
                 if _found_in_scope(noun, prefix):
+                    if verb_modified:
+                        skipped = body[zenshou_end:noun_start]
+                        issues.append({
+                            'claim': num, 'level': 'info',
+                            'word': t['surf'], 'noun': noun,
+                            'msg': (f"請求項{num}：「{t['surf']}{skipped}{noun}」は動詞修飾型照応詞です。"
+                                    f"先行詞は「{noun}」として解決しますが、"
+                                    f"「{noun}」に固有の名称を与える書き方への切り替えを検討してください。"),
+                        })
                     continue
                 if len(direct_parents) <= 1:
                     # 単項従属または独立：全祖先を結合してチェック
@@ -93,7 +104,6 @@ def check_zenshou(claims, dep_map):
                         _found_in_scope(noun, _scope_tokens_for_parent(p, dep_map, claims, _cache))
                         for p in direct_parents
                     )
-                scope_tokens = ancestor_tokens + prefix  # エラーメッセージ用
 
             if not found:
                 suppressed = False
@@ -124,6 +134,16 @@ def check_zenshou(claims, dep_map):
                         'word': t['surf'], 'noun': noun,
                         'msg': f"請求項{num}：「{t['surf']}{noun}」の先行詞がスコープ内に見つかりません{detail}",
                     })
+            elif verb_modified:
+                # 先行詞は見つかったが「前記AしたB」パターン（祖先スコープから解決）
+                skipped = body[zenshou_end:noun_start]
+                issues.append({
+                    'claim': num, 'level': 'info',
+                    'word': t['surf'], 'noun': noun,
+                    'msg': (f"請求項{num}：「{t['surf']}{skipped}{noun}」は動詞修飾型照応詞です。"
+                            f"先行詞は「{noun}」として解決しますが、"
+                            f"「{noun}」に固有の名称を与える書き方への切り替えを検討してください。"),
+                })
     return issues
 
 
