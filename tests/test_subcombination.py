@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
-"""M2b: サブコンビネーションへの限定による明確性違反チェックの単体テスト。
+"""M2b/M2c: サブコンビネーション関連明確性違反チェックの単体テスト。
 
-test_extract_combination_elements: 親クレームからの内部構成要素抽出
-test_check_subcombination:         メインチェック関数の正例・負例・エッジケース
+test_extract_combination_elements:  親クレームからの内部構成要素抽出
+test_check_subcombination:          M2b メインチェック（従属項）
+test_check_other_device_internals:  M2c-A 他装置内部構成記述（独立項）
+test_check_purpose_only:            M2c-C 用途限定のみ（独立項）
 """
 from __future__ import annotations
 
@@ -10,6 +12,8 @@ import pytest
 
 from meisai_checker.patent.subcombination import (
     check_subcombination,
+    check_other_device_internals,
+    check_purpose_only,
     extract_combination_elements,
     extract_zenshou_nouns,
     has_selective_limitation,
@@ -355,3 +359,142 @@ class TestCheckSubcombination:
         # この挙動を確認
         for issue in issues:
             assert issue['check'] == 'subcombination'
+
+
+# ══════════════════════════════════════════════════════════
+# check_other_device_internals のテスト（M2c-A）
+# ══════════════════════════════════════════════════════════
+
+class TestCheckOtherDeviceInternals:
+    """M2c-A: 独立項において他装置の内部構成が記述されているケース。"""
+
+    def _kinds_independent(self, nums):
+        from meisai_checker.parser import KIND_INDEPENDENT
+        return {n: KIND_INDEPENDENT for n in nums}
+
+    # ── 検出すべきケース ──
+
+    def test_server_internals_in_device_claim(self):
+        """パターンA: サーバBの内部構成を情報処理装置Aのクレームに記述。"""
+        body = (
+            'サーバ装置Bと通信可能な情報処理装置Aであって、'
+            '前記サーバ装置Bは、データベースとクエリ処理部とを有し、'
+            '前記情報処理装置Aは、送信部を備える、'
+            '情報処理装置A。'
+        )
+        claims = {1: body}
+        kinds = self._kinds_independent([1])
+        issues = check_other_device_internals(claims, kinds)
+        assert len(issues) == 1
+        assert issues[0]['check'] == 'subcombination_other_internals'
+        assert 'サーバ装置B' in issues[0]['msg'] or 'サーバ' in issues[0]['msg']
+
+    def test_cloud_server_internals_in_program_claim(self):
+        """パターンD: クラウドサーバの機械学習モデル記述をプログラムクレームに記述。"""
+        body = (
+            'クラウドサーバHに接続されるスマートフォン用アプリケーションプログラムであって、'
+            '前記クラウドサーバHは、機械学習モデルを保有し、'
+            'コンピュータに、前記クラウドサーバHへユーザ入力を送信するステップを実行させるプログラム。'
+        )
+        claims = {1: body}
+        kinds = self._kinds_independent([1])
+        issues = check_other_device_internals(claims, kinds)
+        assert len(issues) == 1
+
+    # ── 検出しないケース ──
+
+    def test_main_subject_self_reference_not_flagged(self):
+        """発明主体自身への「は〜を備える」は検出しない。"""
+        body = (
+            '処理部と記憶部とを有する情報処理装置Aであって、'
+            '前記情報処理装置Aは、表示部をさらに備える、'
+            '情報処理装置A。'
+        )
+        claims = {1: body}
+        kinds = self._kinds_independent([1])
+        issues = check_other_device_internals(claims, kinds)
+        assert issues == []
+
+    def test_internal_component_not_flagged(self):
+        """内部構成要素（処理部）への記述は検出しない。"""
+        body = (
+            '処理部と記憶部とを有するデータ処理装置であって、'
+            '前記処理部は、演算ユニットとレジスタとを備える、'
+            'データ処理装置。'
+        )
+        claims = {1: body}
+        kinds = self._kinds_independent([1])
+        issues = check_other_device_internals(claims, kinds)
+        assert issues == []
+
+    def test_dependent_claim_not_checked(self):
+        """従属項は対象外。"""
+        from meisai_checker.parser import KIND_SINGLE_DEP
+        body = (
+            '請求項１に記載の装置において、'
+            '前記サーバBは、追加モジュールを有する装置。'
+        )
+        claims = {2: body}
+        kinds = {2: KIND_SINGLE_DEP}
+        issues = check_other_device_internals(claims, kinds)
+        assert issues == []
+
+
+# ══════════════════════════════════════════════════════════
+# check_purpose_only のテスト（M2c-C）
+# ══════════════════════════════════════════════════════════
+
+class TestCheckPurposeOnly:
+    """M2c-C: 独立項において用途限定のみの他システム参照があるケース。"""
+
+    def _kinds_independent(self, nums):
+        from meisai_checker.parser import KIND_INDEPENDENT
+        return {n: KIND_INDEPENDENT for n in nums}
+
+    # ── 検出すべきケース ──
+
+    def test_karanaoru_system_youto(self):
+        """「〜からなるシステムに用いられる」→ 検出。"""
+        body = (
+            'スマートフォンEおよびクラウドサーバFからなるシステムに用いられる'
+            'エッジコンピューティング装置Gであって、'
+            '演算処理部と通信インターフェースとを備えるエッジコンピューティング装置G。'
+        )
+        claims = {1: body}
+        kinds = self._kinds_independent([1])
+        issues = check_purpose_only(claims, kinds)
+        assert len(issues) == 1
+        assert issues[0]['check'] == 'subcombination_purpose_only'
+
+    def test_kousei_system_notameno(self):
+        """「〜で構成されるシステムのための」→ 検出。"""
+        body = (
+            'サーバとクライアントとで構成されるシステムのための'
+            '情報処理方法であって、データを送信するステップを含む情報処理方法。'
+        )
+        claims = {1: body}
+        kinds = self._kinds_independent([1])
+        issues = check_purpose_only(claims, kinds)
+        assert len(issues) == 1
+
+    # ── 検出しないケース ──
+
+    def test_no_system_reference(self):
+        """システム参照がない通常の装置クレーム → 検出しない。"""
+        body = '処理部と記憶部とを有するデータ処理装置。'
+        claims = {1: body}
+        kinds = self._kinds_independent([1])
+        issues = check_purpose_only(claims, kinds)
+        assert issues == []
+
+    def test_dependent_claim_not_checked(self):
+        """従属項は対象外。"""
+        from meisai_checker.parser import KIND_SINGLE_DEP
+        body = (
+            '請求項１に記載の装置において、'
+            '前記からなるシステムに用いられる装置。'
+        )
+        claims = {2: body}
+        kinds = {2: KIND_SINGLE_DEP}
+        issues = check_purpose_only(claims, kinds)
+        assert issues == []

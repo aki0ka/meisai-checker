@@ -58,6 +58,8 @@ from .textcheck.style import check_style
 from .textcheck.length import check_length
 from .patent.subcombination import (  # noqa: F401
     check_subcombination,
+    check_other_device_internals,
+    check_purpose_only,
     extract_combination_elements,
     extract_zenshou_nouns,
     noun_matches,
@@ -137,7 +139,11 @@ def analyze(text):
             })
 
     # 各チェック実行
-    m2b_issues = check_subcombination(claims, dep_map, kinds)
+    m2b_issues = (
+        check_subcombination(claims, dep_map, kinds)
+        + check_other_device_internals(claims, kinds)
+        + check_purpose_only(claims, kinds)
+    )
     m2_issues = check_dependency(claims, dep_map, kinds) + m2b_issues
     m3_issues = check_zenshou(claims, dep_map)
     m4_issues, element_table, fugo_table, var_table = check_fugo(claims, sections)

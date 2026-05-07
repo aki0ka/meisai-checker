@@ -60,6 +60,12 @@ _EXTERNAL_VERB_BASES = frozenset({
 # 限定述語の助詞（「前記Aは〜」のように述語構造を示す）
 _LIMITING_PARTICLES = frozenset({'は', 'が'})
 
+# 他装置の内部構成を示すサ変動詞語幹（「を保有し」「を搭載し」等）
+# 「を[語幹]し/する」パターンでも内部構成記述として検出する
+_SAHEN_INTERNAL_NOUNS = frozenset({
+    '保有', '搭載', '内蔵', '格納', '収容', '収納', '実装', '内包',
+})
+
 
 # ══════════════════════════════════════════════════════════
 # 内部ヘルパー
@@ -357,6 +363,167 @@ def has_selective_limitation(dep_text: str, mentioned_elems: list[str]) -> bool:
             return True
 
     return False
+
+
+# ══════════════════════════════════════════════════════════
+# M2c: 独立項における他装置記述（パターンA/D・C）
+# ══════════════════════════════════════════════════════════
+
+def _extract_main_subject(body: str) -> str:
+    """請求項末尾の発明主体（名詞句）を抽出する。
+
+    日本語特許独立項は末尾に発明主体の名詞句が来る（head-final）ため、
+    _get_segment_head_noun でトークン列末尾の名詞群を取得する。
+    """
+    toks = _tokenize(body)
+    return _get_segment_head_noun(toks)
+
+
+def _find_other_device_internals(
+    body: str,
+    main_subj: str,
+    internal_components: list[str],
+) -> list[str]:
+    """「前記X（は|が）〜を有し/備え」パターンで X が発明主体・内部構成要素でない箇所を返す。
+
+    内部構成要素（extract_combination_elements で抽出済み）に含まれる要素は
+    誤検知防止のため除外する。
+    """
+    toks = _tokenize(body)
+    n = len(toks)
+    hits: list[str] = []
+
+    for i, t in enumerate(toks):
+        if t['surf'] not in ('前記', '上記'):
+            continue
+
+        noun, _, noun_end_char = _noun_after_zenshou(toks, i)
+        if not noun or len(noun) < 2:
+            continue
+
+        # 発明主体 → スキップ
+        if noun_matches(main_subj, noun):
+            continue
+
+        # 内部構成要素 → スキップ
+        if any(noun_matches(comp, noun) for comp in internal_components):
+            continue
+
+        # 名詞句終端後のトークンへ進む
+        j = i + 1
+        while j < n and toks[j]['end'] <= noun_end_char:
+            j += 1
+        while j < n and toks[j]['pos'] in ('接尾辞', '接頭辞'):
+            j += 1
+
+        if j >= n or toks[j]['surf'] not in ('は', 'が'):
+            continue
+
+        # 句点に達するまでの範囲で「を有し/備え/保有し/搭載し」等を探す
+        k = j + 1
+        while k < n and toks[k]['surf'] not in ('。', '．'):
+            if toks[k]['surf'] == 'を' and k + 1 < n:
+                next_tok = toks[k + 1]
+                next_base = next_tok.get('base', next_tok['surf'])
+                # 通常の内部構成動詞（有する・備える等）
+                matched = next_base in _COMBO_VERB_BASES
+                # サ変動詞パターン: 「を保有し」「を搭載し」等
+                if not matched and next_tok['surf'] in _SAHEN_INTERNAL_NOUNS:
+                    matched = True
+                if matched:
+                    if noun not in hits:
+                        hits.append(noun)
+                    break
+            k += 1
+
+    return hits
+
+
+def check_other_device_internals(
+    claims: dict[int, str],
+    kinds: dict[int, str],
+) -> list[dict[str, Any]]:
+    """M2c-A: 独立項において発明主体以外の装置の内部構成を記述している場合に警告する。
+
+    パターンA/D（審査基準第II部第2章第3節4.2）:
+      「前記サーバBは、データベースとクエリ処理部とを有し」のように
+      発明主体でも内部構成要素でもない装置の内部構成が記述されている場合、
+      その記述が発明主体の構造・機能を特定しなければ明確性違反となる。
+    """
+    issues: list[dict] = []
+
+    for num in sorted(claims.keys()):
+        if kinds.get(num) != KIND_INDEPENDENT:
+            continue
+
+        body = claims[num]
+        main_subj = _extract_main_subject(body)
+        if not main_subj or len(main_subj) < 2:
+            continue
+
+        internal_components = extract_combination_elements(body)
+        hits = _find_other_device_internals(body, main_subj, internal_components)
+
+        for other_device in hits:
+            issues.append({
+                'claim': num,
+                'level': 'warning',
+                'check': 'subcombination_other_internals',
+                'msg': (
+                    f'請求項{num}：発明主体「{main_subj}」でも内部構成要素でもない'
+                    f'「{other_device}」の内部構成（を有し/備え）が記述されています。'
+                    f'この記述が「{main_subj}」の構造・機能を特定しない場合、'
+                    f'明確性要件違反となります'
+                    f'（特許法36条6項2号・審査基準第II部第2章第3節4.2）。'
+                ),
+            })
+
+    return issues
+
+
+# 用途限定のみのパターン（パターンC）
+_PURPOSE_ONLY_PAT = re.compile(
+    r'(?:からなる|を含む|により構成される|で構成される|から構成される)'
+    r'(?:システム|ネットワーク|装置群|環境|プラットフォーム)'
+    r'(?:に用いられる|に使用される|のための|に適用される'
+    r'|において用いられる|において使用される)',
+    re.UNICODE,
+)
+
+
+def check_purpose_only(
+    claims: dict[int, str],
+    kinds: dict[int, str],
+) -> list[dict[str, Any]]:
+    """M2c-C: 独立項において用途限定のみの他サブコンビネーション参照を検出する。
+
+    パターンC（審査基準第II部第2章第3節4.2）:
+      「スマートフォンとサーバとからなるシステムに用いられる装置」のように
+      他のサブコンビネーション群への参照が用途限定にとどまり、
+      発明主体の構造・機能を何ら特定しない場合に警告する。
+    """
+    issues: list[dict] = []
+
+    for num in sorted(claims.keys()):
+        if kinds.get(num) != KIND_INDEPENDENT:
+            continue
+
+        body = claims[num]
+        for m in _PURPOSE_ONLY_PAT.finditer(body):
+            matched = m.group(0)
+            issues.append({
+                'claim': num,
+                'level': 'warning',
+                'check': 'subcombination_purpose_only',
+                'msg': (
+                    f'請求項{num}：「{matched}」は用途限定のみの記載です。'
+                    f'発明主体の構造・機能を何ら特定しない場合、'
+                    f'明確性要件違反となります'
+                    f'（特許法36条6項2号・審査基準第II部第2章第3節4.2）。'
+                ),
+            })
+
+    return issues
 
 
 # ══════════════════════════════════════════════════════════
