@@ -174,7 +174,7 @@ def classify_claims(claims, dep_map):
 
 
 def check_dependency(claims, dep_map, kinds):
-    """M2: 従属関係チェック（自己引用・前方引用・存在チェック・マルチマルチ）"""
+    """M2: 従属関係チェック（自己引用・引用先より前に記載・存在チェック・マルチマルチ）"""
     issues = []
 
     for num in sorted(claims.keys()):
@@ -186,11 +186,11 @@ def check_dependency(claims, dep_map, kinds):
                 "msg": f"請求項{num}が自身を引用しています（特施規24条の3第2号）"
             })
         for d in deps:
-            # 前方引用チェック
+            # 引用する請求項が引用先より前に記載されている（特施規24条の3第4号）
             if d >= num:
                 issues.append({
                     "claim": num, "level": "error",
-                    "msg": f"請求項{num}：請求項{d}はまだ記載されていません（前方引用）（特施規24条の3第4号）"
+                    "msg": f"請求項{num}は引用先の請求項{d}より前に記載されています（特施規24条の3第4号）"
                 })
             # 存在しない請求項
             if d not in claims:

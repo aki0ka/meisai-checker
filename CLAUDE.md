@@ -19,7 +19,7 @@
 
 | ID | 関数 | 場所 | 内容 |
 |----|------|------|------|
-| M2 | check_dependency | parser.py | 自己引用・前方引用・マルチマルチクレーム |
+| M2 | check_dependency | parser.py | 自己引用・引用先より前に記載（特施規24条の3第4号）・マルチマルチクレーム |
 | M3 | check_zenshou | patent/anaphora.py | 前記・当該の照応詞チェック（MeCab使用） |
 | M4 | check_fugo | patent/fugo.py | 符号・変数記号と要素名の対応 |
 | M5 | check_structure 等 | structure/sections.py 等 | JIS Z 8301準拠・段落番号・句読点・見出し |
