@@ -577,6 +577,9 @@ def check_fugo(claims, sections):
     _impl_parts = _IMPL_PAT.findall(_raw)
     desc_text = '\n'.join(_impl_parts) if _impl_parts else sections.get("description", "")
     desc_text += sections.get("drawings", "")
+    # 【符号の説明】は「符号：要素名　次の符号」形式の連続行で誤ペアが大量発生するため除外
+    # （照合は check_fugo_setsumeisho が別途行う）
+    desc_text = re.sub(r'【符号の説明】.*', '', desc_text, flags=re.DOTALL)
     claims_text = sections.get("claims", "")
 
     # 抽出: 図面符号ペアと変数記号ペアを分離
