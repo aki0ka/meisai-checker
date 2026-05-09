@@ -175,7 +175,7 @@ uv がインストールされていないか、ターミナルを再起動し�
 
 ## 関連記事
 
-- [特許明細書チェッカーをClaude Codeで作ってOSS公開した](https://note.com/humble_frog2601/n/n56acc1c6fda3)（note）
+- [AIにくるみ割り器を作らせた──特許明細書チェッカーをOSS公開](https://note.com/humble_frog2601/n/n56acc1c6fda3)（note）
 
 ## フィードバック・改善提案
 
