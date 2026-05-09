@@ -64,6 +64,12 @@ PLIST
 cat > "$APP_PATH/Contents/MacOS/meisai-checker" << 'LAUNCHER'
 #!/bin/bash
 export PATH="/usr/local/bin:/opt/homebrew/bin:$HOME/.local/bin:$PATH"
+
+if ! command -v uvx &> /dev/null; then
+    osascript -e 'display alert "meisai-checker" message "uvx が見つかりません。\n\nuv をインストールしてください:\ncurl -LsSf https://astral.sh/uv/install.sh | sh" as critical'
+    exit 1
+fi
+
 exec uvx --from meisai-checker@latest meisai-checker-gui
 LAUNCHER
 chmod +x "$APP_PATH/Contents/MacOS/meisai-checker"
