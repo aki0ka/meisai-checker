@@ -41,6 +41,36 @@ def _scope_tokens_for_parent(parent, dep_map, claims, cache):
     return toks
 
 
+def _bare_occurrence_claims(noun, scope_claims_dict):
+    """nounが照応詞なしに出現する請求項番号のセットを返す（唯一性チェック用）。
+    同一請求項内の複数出現（発明種類宣言の繰り返し等）はまとめて1件として数える。
+    """
+    found_in = set()
+    for claim_num, body in scope_claims_dict.items():
+        idx = 0
+        while True:
+            pos = body.find(noun, idx)
+            if pos < 0:
+                break
+            pre2 = body[max(0, pos - 2):pos]
+            pre1 = body[max(0, pos - 1):pos]
+            if pre2 not in ('前記', '上記', '当該') and pre1 != '該':
+                found_in.add(claim_num)
+                break
+            idx = pos + 1
+    return found_in
+
+
+def _uniqueness_warning(num, surf, noun, bare_claims):
+    return {
+        'claim': num, 'level': 'warning',
+        'word': surf, 'noun': noun,
+        'msg': (f"請求項{num}：「{surf}{noun}」の先行詞が"
+                f"複数の請求項（{sorted(bare_claims)}）に存在します（唯一性の崩壊）。"
+                f"各{noun}に固有の名称（例：「第1{noun}」「第2{noun}」）を付与することを検討してください。"),
+    }
+
+
 def check_zenshou(claims, dep_map):
     """前記・上記・当該・該の先行詞チェック（fugashiトークンベース）。
 
@@ -94,6 +124,11 @@ def check_zenshou(claims, dep_map):
                                     f"先行詞は「{noun}」として解決しますが、"
                                     f"「{noun}」に固有の名称を与える書き方への切り替えを検討してください。"),
                         })
+                    else:
+                        scope_dict = {a: claims.get(a, '') for a in ancestors | {num}}
+                        bare = _bare_occurrence_claims(noun, scope_dict)
+                        if len(bare) > 1:
+                            issues.append(_uniqueness_warning(num, t['surf'], noun, bare))
                     continue
                 if len(direct_parents) <= 1:
                     # 単項従属または独立：全祖先を結合してチェック
@@ -144,6 +179,12 @@ def check_zenshou(claims, dep_map):
                             f"先行詞は「{noun}」として解決しますが、"
                             f"「{noun}」に固有の名称を与える書き方への切り替えを検討してください。"),
                 })
+            elif t['surf'] not in _TOUGAI_WORDS:
+                # 前記/上記・先行詞あり・動詞修飾なし → 唯一性チェック
+                scope_dict = {a: claims.get(a, '') for a in ancestors | {num}}
+                bare = _bare_occurrence_claims(noun, scope_dict)
+                if len(bare) > 1:
+                    issues.append(_uniqueness_warning(num, t['surf'], noun, bare))
     return issues
 
 
