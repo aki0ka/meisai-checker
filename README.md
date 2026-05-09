@@ -173,6 +173,10 @@ uv がインストールされていないか、ターミナルを再起動し�
 
 `pip install fugashi unidic-lite` を実行してください。MeCab が動かない場合、M3（前記チェック）・M4（符号チェック）・M6（サポート要件）・M7（曖昧性）が実行されませんが、それ以外のチェックは動作します。
 
+## 関連記事
+
+- [特許明細書チェッカーをClaude Codeで作ってOSS公開した](https://note.com/humble_frog2601/n/n56acc1c6fda3)（note）
+
 ## フィードバック・改善提案
 
 バグ報告・機能要望・チェックルールの改善提案を歓迎します。[GitHub Issues](https://github.com/aki0ka/meisai-checker/issues) までお気軽にどうぞ。実際の特許実務に基づくご意見は特に歓迎です。
