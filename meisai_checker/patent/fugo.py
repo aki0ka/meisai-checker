@@ -125,6 +125,10 @@ def _is_fugo_exclude(name, toks=None):
     # 全角大文字4文字以上の技術規格略称（ＩＥＥＥ, ＣＤＭＡ等）を除外
     if len(name) >= 4 and all(_is_zenkaku_upper(c) for c in name):
         return True
+    # 全角英字のみかつ小文字を含む（Ｒｉ, Ｌｕ等の変数記号添字）は要素名から除外
+    if (all(_is_zenkaku_alpha(c) for c in name)
+            and any(_is_zenkaku_lower(c) for c in name)):
+        return True
     # 公報番号パターン
     if _is_koho_name(name) or _is_koho_name_part(name):
         return True
@@ -436,6 +440,11 @@ def _extract_elements_tokens(text):
                            and not _is_formal_noun_tok(tokens[_mj2])
                            and tokens[_mj2]['surf'] not in _ZENSHOU_WORDS
                            and tokens[_mj2]['pos'] != '接尾辞'):
+                        # 全角英字1文字 + 直後が全角数字 → 変数記号で停止
+                        _s = tokens[_mj2]['surf']
+                        if (len(_s) == 1 and _is_zenkaku_alpha(_s[0])
+                                and _mj2 + 1 < n and _is_fugo_tok(tokens[_mj2 + 1])):
+                            break
                         _mj2 += 1
                     if (_mj2 < n and _is_fugo_tok(tokens[_mj2])
                             and _mj2 > _mj + 1):  # 核名詞列が存在
@@ -512,7 +521,9 @@ def _extract_elements_tokens(text):
                     alpha_run = last_tok['surf']
                     if (len(alpha_run) >= 2
                             and all(_is_zenkaku_alpha(c) for c in alpha_run)
-                            and j < n and _is_fugo_tok(tokens[j])):
+                            and j < n and _is_fugo_tok(tokens[j])
+                            # 小文字混在（Ｒｉ等の変数添字）はパターンBでも除外
+                            and not any(_is_zenkaku_lower(c) for c in alpha_run)):
                         # ＣＰＵ１０ パターン: alpha_run=ＣＰＵ, 数字=１０
                         fugo_parts, j = _collect_fugo_suffix(tokens, j)
                         fugo = ''.join(fugo_parts)
