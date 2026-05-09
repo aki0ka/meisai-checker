@@ -69,6 +69,20 @@ uv cache clean
 
 ---
 
+### Mac でアプリとして Dock に固定する
+
+uv がインストール済みであれば、以下のコマンド1つで `~/Applications/meisai-checker.app` が作成されます。
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/aki0ka/meisai-checker/main/install_mac_app.sh)
+```
+
+作成後は Finder で **移動 → ホーム → Applications** を開き、`meisai-checker.app` を Dock にドラッグしてください。
+
+起動するたびに `uvx --from meisai-checker@latest` で最新版を自動取得します。アップデート作業は不要です。
+
+---
+
 ### ソースから実行する方法
 
 git clone してローカルで動かしたい場合:
