@@ -35,6 +35,7 @@ all = ["fastmcp>=0.4", "pytoony>=0.1.2"]
 
 [project.scripts]
 meisai-checker = "meisai_checker.cli:main"
+meisai-checker-gui = "meisai_checker.gui:main"
 meisai-checker-mcp = "meisai_checker.mcp_server:mcp.run"
 
 [project.urls]
