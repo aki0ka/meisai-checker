@@ -225,6 +225,7 @@ header{height:var(--hdr);display:flex;align-items:center;gap:14px;
 .m3-ok{color:var(--green)}
 .m3-err-missing{color:var(--red)}      /* 先行詞なし */
 .m3-err-ambig{color:var(--gold)}       /* 先行詞が複数・特定不能 */
+.m3-info{color:var(--cyan)}            /* 動詞修飾型照応詞 */
 .m3-word{font-size:10px;color:var(--ink3);font-family:var(--mono);}
 /* 統計 */
 .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;
@@ -1031,7 +1032,8 @@ function buildM23BotAll(body, d) {
         refClaim:  r.claim,
         firstClaim: fc,
         pos:   r.pos != null ? r.pos : 9999,
-        error: r.error
+        error: r.error,
+        verbModified: r.verb_modified
       });
     });
   });
@@ -1054,6 +1056,9 @@ function buildM23BotAll(body, d) {
     if (row.error) {
       label = '?-' + row.refClaim;
       statusCls = 'm3-err-missing'; statusTxt = '❌ 先行詞なし';
+    } else if (row.verbModified) {
+      label = row.firstClaim + '-' + row.refClaim;
+      statusCls = 'm3-info'; statusTxt = 'ℹ 動詞修飾型';
     } else {
       label = row.firstClaim + '-' + row.refClaim;
       statusCls = 'm3-ok'; statusTxt = '✓ 請求項' + row.firstClaim + 'で定義';

@@ -727,6 +727,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 19,
+          "verb_modified": false,
           "word": "該"
         },
         {
@@ -734,6 +735,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 0,
+          "verb_modified": false,
           "word": "前記"
         },
         {
@@ -741,6 +743,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 0,
+          "verb_modified": false,
           "word": "前記"
         },
         {
@@ -748,6 +751,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 29,
+          "verb_modified": false,
           "word": "前記"
         }
       ]
@@ -762,6 +766,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 129,
+          "verb_modified": false,
           "word": "前記"
         }
       ]
@@ -776,6 +781,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 49,
+          "verb_modified": false,
           "word": "該"
         }
       ]
@@ -790,6 +796,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 21,
+          "verb_modified": false,
           "word": "前記"
         }
       ]

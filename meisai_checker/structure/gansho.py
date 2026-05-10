@@ -155,7 +155,7 @@ def _ga3_atetsaki(blocks: list[tuple[str, str, int]]) -> list[dict]:
     issues = []
     for k, v, ln in blocks:
         if k == 'あて先':
-            if v and '特許庁長官殿' not in v:
+            if v and '特許庁長官殿' not in v.replace(' ', '').replace('　', ''):
                 issues.append({
                     'level': 'warning', 'check': 'GA3',
                     'msg': f"【あて先】は「特許庁長官殿」と記録します（現在: 「{v}」）。"

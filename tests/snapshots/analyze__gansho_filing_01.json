@@ -275,6 +275,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 167,
+          "verb_modified": false,
           "word": "該"
         }
       ]
@@ -289,6 +290,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 89,
+          "verb_modified": false,
           "word": "該"
         },
         {
@@ -296,6 +298,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 197,
+          "verb_modified": false,
           "word": "該"
         }
       ]

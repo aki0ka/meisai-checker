@@ -225,6 +225,8 @@ def build_noun_groups(claims, dep_map, ref_hits, m3_issues):
     # 互換用: (claim, noun) のみのセット（wordなしのissueに対応）
     error_set_no_word = {(i['claim'], i['noun']) for i in m3_issues
                          if i.get('level') == 'error' and 'word' not in i}
+    info_set = {(i['claim'], i['noun'], i.get('word', '')) for i in m3_issues
+                if i.get('level') == 'info'}
 
     # ref_hitsを名詞句でグループ化
     groups = {}  # noun → group dict
@@ -241,11 +243,13 @@ def build_noun_groups(claims, dep_map, ref_hits, m3_issues):
             }
         is_err = ((hit['claim'], noun, hit['word']) in error_set or
                   (hit['claim'], noun) in error_set_no_word)
+        is_info = (hit['claim'], noun, hit['word']) in info_set
         groups[noun]['refs'].append({
             'claim': hit['claim'],
             'word':  hit['word'],
             'pos':   hit.get('pos', 0),   # 請求項内文字位置
             'error': is_err,
+            'verb_modified': is_info,
         })
         if is_err:
             groups[noun]['error'] = True

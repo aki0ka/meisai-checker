@@ -226,7 +226,7 @@ def _check_long_no_comma(claim_num: int, body: str) -> list[dict]:
                 'level': 'info',
                 'check': 'ambiguity_long_clause',
                 'msg': (f"請求項{claim_num}：読点なしで{len(seg)}文字続く節があります"
-                        f"（「{seg[:20]}…」）。"
+                        f"（閾値 {_LONG_CLAUSE_CHARS} 文字以上、「{seg[:20]}…」）。"
                         f"係り受けが不明瞭になりやすいため、読点の挿入を検討してください。")
             })
     return issues
