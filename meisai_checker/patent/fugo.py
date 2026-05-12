@@ -487,6 +487,24 @@ def _extract_elements_tokens(text):
 
                 if j < n and _is_fugo_tok(tokens[j]):
                     noun_toks_raw = tokens[i:j]
+                    # 逆スキャン: 1文字名（接尾辞または普通名詞）かつ直前に動詞が隣接する場合、
+                    # 動詞連用形も要素名に取り込む（例: 書込部→書+込+部）
+                    # ただし接頭辞（第）は序数修飾の一部なので対象外
+                    if (len(noun_toks_raw) == 1
+                            and len(noun_toks_raw[0]['surf']) == 1
+                            and noun_toks_raw[0]['pos'] != '接頭辞'
+                            and i > 0):
+                        _back = i - 1
+                        verb_prefix = []
+                        while _back >= 0 and tokens[_back]['pos'] == '動詞':
+                            next_start = (verb_prefix[0]['start'] if verb_prefix
+                                          else tokens[i]['start'])
+                            if tokens[_back]['end'] != next_start:
+                                break
+                            verb_prefix.insert(0, tokens[_back])
+                            _back -= 1
+                        if verb_prefix:
+                            noun_toks_raw = verb_prefix + noun_toks_raw
                     # 量化/序列修飾語を正規化
                     noun_toks, mod_kind = _strip_quant_prefix(noun_toks_raw)
                     name = ''.join(tok['surf'] for tok in noun_toks)

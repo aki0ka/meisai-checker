@@ -168,10 +168,14 @@ def _fc2_order(headings: list[tuple[str, int]]) -> list[dict]:
 def _fc3_duplicate(headings: list[tuple[str, int]]) -> list[dict]:
     issues = []
     seen: dict[str, int] = {}
-    # 連番付き項目（実施例○等）は重複チェック対象外
+    # 重複チェック対象: 明細書の規定見出しのみ
+    # （願書の【識別番号】【発明者】【氏名】等は複数回出現が正常なため除外）
+    _MEISAI_KNOWN = set(_SECTION_ORDER)
     non_numbered = [
         h for h, _ in headings
-        if not re.search(r'\d', h) and h not in ('特許文献', '非特許文献')
+        if not re.search(r'\d', h)
+        and h not in ('特許文献', '非特許文献')
+        and h in _MEISAI_KNOWN
     ]
     for h in non_numbered:
         if h in seen:

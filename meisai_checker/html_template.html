@@ -98,6 +98,15 @@ header{height:var(--hdr);display:flex;align-items:center;gap:14px;
   border-radius:2px;padding:0 1px;}
 .hl-zenshou.noun-active .hl-zenshou-skip,.hl-zenshou-err.noun-active .hl-zenshou-skip{
   background:rgba(167,139,250,.35)!important;color:rgba(139,92,246,.9)!important;}
+/* 記述照応詞（前記AしたB型）→ 紫ハイライト */
+.hl-zenshou-vm{background:rgba(167,139,250,.15);color:rgba(139,92,246,.9);
+  border-bottom:1.5px solid rgba(139,92,246,.4);
+  border-radius:2px 2px 0 0;padding:0 1px;cursor:pointer;transition:background .15s;}
+.hl-zenshou-vm:hover{background:rgba(167,139,250,.3)}
+.hl-zenshou-vm.noun-active{
+  background:rgba(167,139,250,.5)!important;
+  outline:1.5px solid rgba(139,92,246,.9);outline-offset:1px;
+}
 .hl-zenshou-err{background:rgba(224,85,85,.2);color:var(--red);
   border-bottom:1.5px solid rgba(224,85,85,.6);
   border-radius:2px 2px 0 0;padding:0 1px;cursor:pointer;}
@@ -218,6 +227,7 @@ header{height:var(--hdr);display:flex;align-items:center;gap:14px;
 /* 要素名セル */
 .m3-zenshou{font-family:var(--serif);font-size:12px;color:var(--cyan);}
 .m3-zenshou.err{color:var(--red)}
+.m3-zenshou.vm{color:rgba(139,92,246,.9)}
 /* 請求項セル */
 .m3-claim{font-family:var(--mono);font-size:10px;color:var(--blue);}
 /* ステータスセル */
@@ -225,7 +235,7 @@ header{height:var(--hdr);display:flex;align-items:center;gap:14px;
 .m3-ok{color:var(--green)}
 .m3-err-missing{color:var(--red)}      /* 先行詞なし */
 .m3-err-ambig{color:var(--gold)}       /* 先行詞が複数・特定不能 */
-.m3-info{color:var(--cyan)}            /* 動詞修飾型照応詞 */
+.m3-info{color:rgba(139,92,246,.9)}            /* 記述照応詞 → 紫 */
 .m3-word{font-size:10px;color:var(--ink3);font-family:var(--mono);}
 /* 統計 */
 .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;
@@ -997,7 +1007,7 @@ function buildM23Tab(con, d) {
             el.classList.add('focused');
             el.scrollIntoView({behavior:'smooth', block:'center'});
             // 照応詞ハイライトをリセット
-            el.querySelectorAll('.hl-zenshou,.hl-zenshou-err').forEach(function(e){e.classList.remove('noun-active');});
+            el.querySelectorAll('.hl-zenshou,.hl-zenshou-err,.hl-zenshou-vm').forEach(function(e){e.classList.remove('noun-active');});
             el.querySelectorAll('.hl-first-noun').forEach(function(e){e.classList.remove('ref-active');});
           }
         }, 80);
@@ -1058,12 +1068,12 @@ function buildM23BotAll(body, d) {
       statusCls = 'm3-err-missing'; statusTxt = '❌ 先行詞なし';
     } else if (row.verbModified) {
       label = row.firstClaim + '-' + row.refClaim;
-      statusCls = 'm3-info'; statusTxt = 'ℹ 動詞修飾型';
+      statusCls = 'm3-info'; statusTxt = 'ℹ 記述照応詞';
     } else {
       label = row.firstClaim + '-' + row.refClaim;
       statusCls = 'm3-ok'; statusTxt = '✓ 請求項' + row.firstClaim + 'で定義';
     }
-    var zenshouCls = row.error ? 'm3-zenshou err' : 'm3-zenshou';
+    var zenshouCls = row.error ? 'm3-zenshou err' : (row.verbModified ? 'm3-zenshou vm' : 'm3-zenshou');
     html += '<tr class="m3-row" data-noun="'+esc(row.noun)+'" data-claim="'+row.refClaim+'">' +
       '<td style="font-family:var(--mono);font-size:10px;color:var(--ink3)">'+esc(label)+'</td>' +
       '<td><span class="'+zenshouCls+'">'+esc(row.word + row.noun)+'</span></td>' +
@@ -1664,7 +1674,7 @@ function makeBlockHtml(b, blockCls, roleCls, roleLabel) {
 
 function activateNounHighlight(wrap, noun, targetClaim, isError) {
   // ① 全アクティブクラスをリセット
-  wrap.querySelectorAll('.hl-zenshou,.hl-zenshou-err').forEach(function(el) {
+  wrap.querySelectorAll('.hl-zenshou,.hl-zenshou-err,.hl-zenshou-vm').forEach(function(el) {
     el.classList.remove('noun-active', 'noun-active-err');
   });
   wrap.querySelectorAll('.hl-first-noun,.hl-noun').forEach(function(el) {
@@ -1673,9 +1683,9 @@ function activateNounHighlight(wrap, noun, targetClaim, isError) {
 
   // ② 照応詞スパン（data-noun=noun かつ data-claim=targetClaim）を強調
   // isError=true  → 赤（noun-active-err）
-  // isError=false → 水色（noun-active）
+  // isError=false → 水色または紫（noun-active）
   var activeCls = isError ? 'noun-active-err' : 'noun-active';
-  wrap.querySelectorAll('.hl-zenshou,.hl-zenshou-err').forEach(function(el) {
+  wrap.querySelectorAll('.hl-zenshou,.hl-zenshou-err,.hl-zenshou-vm').forEach(function(el) {
     var elNoun  = el.getAttribute('data-noun');
     var elClaim = parseInt(el.getAttribute('data-claim') || '0');
     if (elNoun === noun && elClaim === targetClaim) {

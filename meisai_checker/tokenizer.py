@@ -431,6 +431,33 @@ def _noun_after_zenshou(tokens, zenshou_idx):
                         return tokens[k-1]['surf'] + y, tokens[k-1]['start'], span_y[-1]['end']
                     return y, span_y[0]['start'], span_y[-1]['end']
 
+    # 形状詞修飾パターン
+    # 弁別基準: 助動詞「な（だ連体形）」の有無
+    #   形状詞 + な(助動詞-ダ/連体形) + 名詞 → 記述照応詞（「新たな〜」型）
+    #   形状詞 + 名詞（直接）          → 複合名詞ラベル候補（「新規〜」型）→ 通常パターンへ
+    if t1['pos'] == '形状詞':
+        k = j + 1
+        if (k < n
+                and tokens[k]['pos'] == '助動詞'
+                and tokens[k]['surf'] == 'な'):
+            k += 1  # な をスキップ
+            if k < n and _is_noun_tok(tokens[k]) and not _is_fugo_tok(tokens[k]):
+                span_y = _noun_span(tokens, k)
+                y = _span_to_str(span_y)
+                if len(y) >= 2:
+                    return y, span_y[0]['start'], span_y[-1]['end']
+        # な なし（複合名詞）→ fall through して通常パターンへ
+
+    # 形容詞修飾パターン（〜い + 名詞 → 常に記述照応詞）
+    # 形容詞は複合名詞を形成しないため、な の有無にかかわらずスキップ
+    elif t1['pos'] == '形容詞':
+        k = j + 1
+        if k < n and _is_noun_tok(tokens[k]) and not _is_fugo_tok(tokens[k]):
+            span_y = _noun_span(tokens, k)
+            y = _span_to_str(span_y)
+            if len(y) >= 2:
+                return y, span_y[0]['start'], span_y[-1]['end']
+
     # 通常パターン
     span = _noun_span(tokens, zenshou_idx + 1)
     noun = _span_to_str(span)

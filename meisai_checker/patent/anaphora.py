@@ -120,7 +120,7 @@ def check_zenshou(claims, dep_map):
                         issues.append({
                             'claim': num, 'level': 'info',
                             'word': t['surf'], 'noun': noun,
-                            'msg': (f"請求項{num}：「{t['surf']}{skipped}{noun}」は動詞修飾型照応詞です。"
+                            'msg': (f"請求項{num}：「{t['surf']}{skipped}{noun}」は記述照応詞です。"
                                     f"先行詞は「{noun}」として解決しますが、"
                                     f"「{noun}」に固有の名称を与える書き方への切り替えを検討してください。"),
                         })
@@ -175,7 +175,7 @@ def check_zenshou(claims, dep_map):
                 issues.append({
                     'claim': num, 'level': 'info',
                     'word': t['surf'], 'noun': noun,
-                    'msg': (f"請求項{num}：「{t['surf']}{skipped}{noun}」は動詞修飾型照応詞です。"
+                    'msg': (f"請求項{num}：「{t['surf']}{skipped}{noun}」は記述照応詞です。"
                             f"先行詞は「{noun}」として解決しますが、"
                             f"「{noun}」に固有の名称を与える書き方への切り替えを検討してください。"),
                 })
