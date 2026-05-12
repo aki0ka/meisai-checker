@@ -241,6 +241,14 @@ def _noun_span(tokens, start_idx):
         # 照応詞で停止
         if t['surf'] in _ZENSHOU_WORDS:
             break
+        # 非カタカナ形状詞 + 後続名詞 → 複合名詞修飾語として継続（「新規〜」型）
+        # 例: 「新規解析結果」「固有名称」など、な を挟まない形状詞+名詞複合語
+        if (t['pos'] == '形状詞'
+                and not all('゠' <= c <= 'ヿ' for c in (t['surf'] or ''))
+                and i + 1 < n and _is_noun_tok(tokens[i + 1])):
+            span.append(t)
+            i += 1
+            continue
         # 形式名詞（うち・とき・こと等）は名詞句の核ではないので停止
         # ただし直前が接頭辞のときは副詞可能名詞でも継続（不具合・大規模・副波長 等）
         if _is_formal_noun_tok(t):
@@ -317,7 +325,13 @@ def _collect_defined_nouns(tokens):
         # カタカナ形状詞（アクティブ等）も名詞句の起点として扱う
         _is_kata_keijo = (t['pos'] == '形状詞' and t['surf']
                           and all('゠' <= c <= 'ヿ' for c in t['surf']))
-        if _is_noun_tok(t) or _is_kata_keijo:
+        # 非カタカナ形状詞 + 後続名詞 → 複合名詞の起点（「新規解析結果」等）
+        _is_keijo_noun_prefix = (
+            t['pos'] == '形状詞' and t['surf']
+            and not all('゠' <= c <= 'ヿ' for c in t['surf'])
+            and i + 1 < n and _is_noun_tok(tokens[i + 1])
+        )
+        if _is_noun_tok(t) or _is_kata_keijo or _is_keijo_noun_prefix:
             span = _noun_span(tokens, i)
             s = _span_to_str(span)
             # 除外条件:
