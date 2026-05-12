@@ -967,6 +967,19 @@ function buildM23Tab(con, d) {
   m2html += '</tbody></table>';
   topDiv.innerHTML = m2html;
 
+  // M2 issueリスト（自己引用・順序・存在エラー等）
+  var m2issues = d.issues.m2 || [];
+  if (m2issues.length) {
+    var m2IssHead = document.createElement('div');
+    m2IssHead.style.cssText = 'padding:4px 10px 2px;font-size:10px;font-family:var(--mono);color:var(--ink3);border-top:1px solid var(--border);margin-top:2px';
+    m2IssHead.textContent = 'M2 従属関係 チェック結果';
+    topDiv.appendChild(m2IssHead);
+    var m2IssDiv = document.createElement('div');
+    m2IssDiv.innerHTML = buildIssueList(m2issues, 'm2');
+    attachIssueEvents(m2IssDiv, d, 'm2');
+    topDiv.appendChild(m2IssDiv);
+  }
+
   // ── 下部：照応詞リスト ──
   var botDiv = document.createElement('div');
   botDiv.id = 'm23-bot';
@@ -1043,7 +1056,8 @@ function buildM23BotAll(body, d) {
         firstClaim: fc,
         pos:   r.pos != null ? r.pos : 9999,
         error: r.error,
-        verbModified: r.verb_modified
+        verbModified: r.verb_modified,
+        uniquenessWarning: !!r.uniqueness_warning
       });
     });
   });
@@ -1069,6 +1083,9 @@ function buildM23BotAll(body, d) {
     } else if (row.verbModified) {
       label = row.firstClaim + '-' + row.refClaim;
       statusCls = 'm3-info'; statusTxt = 'ℹ 記述照応詞';
+    } else if (row.uniquenessWarning) {
+      label = row.firstClaim + '-' + row.refClaim;
+      statusCls = 'm3-err-ambig'; statusTxt = '⚠ 唯一性の崩壊';
     } else {
       label = row.firstClaim + '-' + row.refClaim;
       statusCls = 'm3-ok'; statusTxt = '✓ 請求項' + row.firstClaim + 'で定義';

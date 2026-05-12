@@ -615,6 +615,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 128,
+          "uniqueness_warning": false,
           "verb_modified": false,
           "word": "該"
         }
@@ -630,6 +631,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 41,
+          "uniqueness_warning": false,
           "verb_modified": false,
           "word": "該"
         },
@@ -638,6 +640,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 150,
+          "uniqueness_warning": false,
           "verb_modified": false,
           "word": "上記"
         }
@@ -653,6 +656,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 26,
+          "uniqueness_warning": false,
           "verb_modified": false,
           "word": "該"
         },
@@ -661,6 +665,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 73,
+          "uniqueness_warning": false,
           "verb_modified": false,
           "word": "該"
         },
@@ -669,6 +674,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 87,
+          "uniqueness_warning": false,
           "verb_modified": false,
           "word": "上記"
         },
@@ -677,6 +683,7 @@
           "error": false,
           "first_claim": 1,
           "pos": 178,
+          "uniqueness_warning": false,
           "verb_modified": false,
           "word": "上記"
         }
