@@ -419,22 +419,36 @@ def _find_other_device_internals(
         if j >= n or toks[j]['surf'] not in ('は', 'が'):
             continue
 
-        # 句点に達するまでの範囲で「を有し/備え/保有し/搭載し」等を探す
+        particle = toks[j]['surf']
+
+        # 「が」は関係節・条件節でも使われるため係り受けなしには役割を確定できない。
+        # 「は」は主節の主語マーカーとして使われることがほとんどのため文末まで走査する。
+        # 「が」の場合は読点（、）または条件節マーカーで走査を打ち切る（短距離限定）。
+        # ただし「前記Xが、〜を有する」のように「が」直後の読点はスタイル上の句読点のため
+        # スキップして走査を継続する。
+        _CONDITIONAL_MARKERS = frozenset({'場合', 'とき', 'であれば', 'ならば', 'なら', '際'})
+
         k = j + 1
+        # 「が」直後の読点はスタイル上のものとしてスキップ
+        if particle == 'が' and k < n and toks[k]['surf'] in ('、', '，'):
+            k += 1
+        found = False
         while k < n and toks[k]['surf'] not in ('。', '．'):
-            if toks[k]['surf'] == 'を' and k + 1 < n:
+            surf = toks[k]['surf']
+            if particle == 'が' and (surf in ('、', '，') or surf in _CONDITIONAL_MARKERS):
+                break
+            if surf == 'を' and k + 1 < n:
                 next_tok = toks[k + 1]
                 next_base = next_tok.get('base', next_tok['surf'])
-                # 通常の内部構成動詞（有する・備える等）
                 matched = next_base in _COMBO_VERB_BASES
-                # サ変動詞パターン: 「を保有し」「を搭載し」等
                 if not matched and next_tok['surf'] in _SAHEN_INTERNAL_NOUNS:
                     matched = True
                 if matched:
-                    if noun not in hits:
-                        hits.append(noun)
+                    found = True
                     break
             k += 1
+        if found and noun not in hits:
+            hits.append(noun)
 
     return hits
 
