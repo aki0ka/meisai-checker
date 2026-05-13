@@ -181,6 +181,15 @@ header{height:var(--hdr);display:flex;align-items:center;gap:14px;
 .issue-row[data-level="info"]{border-left-color:var(--cyan)}
 .issue-row.lv-info:not(.active){border-left:3px solid rgba(56,217,245,.3)}
 .lv-info .iss-lv{background:rgba(56,217,245,.12);color:var(--cyan);border:1px solid rgba(56,217,245,.3)}
+.issue-row.lv-ok:not(.active){border-left:3px solid rgba(22,163,74,.3)}
+.lv-ok .iss-lv{background:rgba(22,163,74,.12);color:var(--green);border:1px solid rgba(22,163,74,.3)}
+.hide-ok .issue-row.lv-ok{display:none}
+.hide-ok tr.m2-claim-row-ok{display:none}
+.hide-ok tr.m3-row-ok{display:none}
+.hide-ok tr.support-row-ok{display:none}
+.hide-ok tr.fugo-table-row-ok{display:none}
+.hide-ok tr.var-table-row-ok{display:none}
+.hide-ok tr.setsu-row-ok{display:none}
 .iss-claim{font-family:var(--mono);font-size:10px;color:var(--blue);flex-shrink:0}
 .iss-msg{font-size:11px;color:var(--ink2);line-height:1.5}
 .iss-detail{font-family:var(--mono);font-size:10px;color:var(--ink3);padding-top:2px}
@@ -294,6 +303,7 @@ header{height:var(--hdr);display:flex;align-items:center;gap:14px;
     <button class="hb hb-off" id="ontop-btn" title="常に前面表示" onclick="toggleOnTop()" style="font-size:10px;padding:2px 8px;cursor:pointer">📌 前面固定</button>
     <button class="hb hb-off" id="copy-btn" title="結果をMarkdownでコピー" onclick="copyResultsMarkdown()" style="font-size:10px;padding:2px 8px;cursor:pointer;display:none">📋 コピー</button>
     <button class="hb hb-off" id="download-btn" title="結果をテキストファイルで保存" onclick="downloadResultsTxt()" style="font-size:10px;padding:2px 8px;cursor:pointer;display:none">💾 保存</button>
+    <button class="hb hb-off" id="hide-ok-btn" title="合格（OK）項目を非表示／表示" onclick="toggleHideOk()" style="font-size:10px;padding:2px 8px;cursor:pointer;display:none">OK非表示</button>
     <button class="hb hb-off" id="debug-btn" title="デバッグログ" onclick="toggleDebugPanel()" style="font-size:10px;padding:2px 6px;cursor:pointer">🐛</button>
     <button id="update-btn" onclick="openReleasesPage()" style="display:none;font-size:10px;padding:2px 8px;cursor:pointer;background:#2a6;color:#fff;border:none;border-radius:4px" title="GitHubリリースページを開く">🆕 <span id="update-version"></span></button>
   </div>
@@ -434,6 +444,7 @@ function showInputPanel() {
   document.getElementById('block-area').style.display = 'none';
   document.getElementById('copy-btn').style.display = 'none';
   document.getElementById('download-btn').style.display = 'none';
+  document.getElementById('hide-ok-btn').style.display = 'none';
   document.getElementById('stats-row').style.display = 'none';
   G.data = null;
 }
@@ -473,6 +484,14 @@ function toggleOnTop() {
   }
 }
 
+function toggleHideOk() {
+  var cont = document.getElementById('tab-contents');
+  var btn  = document.getElementById('hide-ok-btn');
+  if (!cont || !btn) return;
+  var on = cont.classList.toggle('hide-ok');
+  btn.className = 'hb ' + (on ? 'hb-on' : 'hb-off');
+}
+
 // ── テキストから解析実行 ──
 function runAnalyzeFromText(text) {
   if (!text || !text.trim()) {
@@ -496,6 +515,7 @@ function runAnalyzeFromText(text) {
     renderAll(d);
     document.getElementById('copy-btn').style.display = '';
     document.getElementById('download-btn').style.display = '';
+    document.getElementById('hide-ok-btn').style.display = '';
   }).catch(function(e) {
     hideLoading();
     alert('APIエラー: ' + e);
@@ -954,7 +974,7 @@ function buildM23Tab(con, d) {
     var deps = (c.deps && c.deps.length)
       ? c.deps.map(function(dd){return '<span class="m2-num">'+dd+'</span>';}).join(' ')
       : '—';
-    var rowCls = (isMM ? 'mm-warn' : '') + (hasM3err ? ' m3-row-err' : hasM3 ? ' m3-row-has' : '');
+    var rowCls = (isMM ? 'mm-warn' : 'm2-claim-row-ok') + (hasM3err ? ' m3-row-err' : hasM3 ? ' m3-row-has' : '');
     var badge = hasM3err ? '<span class="m23-badge err">!</span>'
               : hasM3    ? '<span class="m23-badge">照</span>' : '';
     m2html += '<tr class="m2-claim-row'+( rowCls?' '+rowCls.trim():'')+'" data-num="'+c.num+'">' +
@@ -1091,7 +1111,7 @@ function buildM23BotAll(body, d) {
       statusCls = 'm3-ok'; statusTxt = '✓ 請求項' + row.firstClaim + 'で定義';
     }
     var zenshouCls = row.error ? 'm3-zenshou err' : (row.verbModified ? 'm3-zenshou vm' : 'm3-zenshou');
-    html += '<tr class="m3-row" data-noun="'+esc(row.noun)+'" data-claim="'+row.refClaim+'">' +
+    html += '<tr class="m3-row'+(statusCls==='m3-ok'?' m3-row-ok':'')+'" data-noun="'+esc(row.noun)+'" data-claim="'+row.refClaim+'">' +
       '<td style="font-family:var(--mono);font-size:10px;color:var(--ink3)">'+esc(label)+'</td>' +
       '<td><span class="'+zenshouCls+'">'+esc(row.word + row.noun)+'</span></td>' +
       '<td><span class="m3-status '+statusCls+'">'+statusTxt+'</span></td>' +
@@ -1230,7 +1250,7 @@ function buildFugoTab(con, d) {
     var nameHtml = row.names.map(function(n, i) {
       return '<span style="'+(dup && i>0?'color:var(--red);':'')+'">' + esc(n) + '</span>';
     }).join('<span style="color:var(--ink3);margin:0 3px">/</span>');
-    html += '<tr class="fugo-table-row" style="'+bgStyle+'"' +
+    html += '<tr class="fugo-table-row'+(dup?'':' fugo-table-row-ok')+'" style="'+bgStyle+'"' +
       ' data-fugo="'+esc(row.fugo)+'"' +
       ' data-names="'+esc(JSON.stringify(row.names))+'">' +
       '<td style="font-family:var(--mono);color:'+(dup?'var(--red)':'var(--green)')+'">'+esc(row.fugo)+'</td>' +
@@ -1269,7 +1289,7 @@ function buildFugoTab(con, d) {
       var physHtml = row.physnames.map(function(n, idx) {
         return '<span style="'+(dup && idx>0?'color:var(--red);':'')+'">' + esc(n) + '</span>';
       }).join('<span style="color:var(--ink3);margin:0 3px">/</span>');
-      vhtml += '<tr class="var-table-row" style="'+bgStyle+'"' +
+      vhtml += '<tr class="var-table-row'+(dup?'':' var-table-row-ok')+'" style="'+bgStyle+'"' +
         ' data-vsym="'+esc(row.vsym)+'"' +
         ' data-physnames="'+esc(JSON.stringify(row.physnames))+'">' +
         '<td style="font-family:var(--mono);color:'+(dup?'var(--red)':'var(--cyan)')+'">'+esc(row.vsym)+'</td>' +
@@ -1315,7 +1335,7 @@ function buildFugoTab(con, d) {
       var mismatch = bodyNames && setsuName && bodyNames.indexOf(setsuName) < 0 &&
                      setsuName.indexOf(bodyNames) < 0;
       var rowStyle = mismatch ? 'background:rgba(224,85,85,.07);cursor:pointer' : 'cursor:pointer';
-      shtml += '<tr class="setsu-row" data-fugo="' + esc(fugo) + '" style="' + rowStyle + '">' +
+      shtml += '<tr class="setsu-row'+(mismatch?'':' setsu-row-ok')+'" data-fugo="' + esc(fugo) + '" style="' + rowStyle + '">' +
         '<td style="font-family:var(--mono);color:var(--cyan)">' + esc(fugo) + '</td>' +
         '<td>' + esc(setsuName) +
           (mismatch ? '<br><span style="color:var(--red);font-size:10px">本文：' + esc(bodyNames) + '</span>' : '') +
@@ -1429,7 +1449,7 @@ function buildSupportTab(con, d) {
     var claimsStr = (row.claims||[]).map(function(n){
       return '<span class="m2-num">'+n+'</span>';
     }).join(' ');
-    html += '<tr class="support-row" data-idx="'+i+'"'+rowStyle+'>' +
+    html += '<tr class="support-row'+(anyMiss?'':' support-row-ok')+'" data-idx="'+i+'"'+rowStyle+'>' +
       '<td style="font-weight:500">'+esc(row.noun)+'</td>' +
       '<td>'+claimsStr+'</td>' +
       cellOk(row.in_impl) +

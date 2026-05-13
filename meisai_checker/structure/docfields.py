@@ -520,18 +520,27 @@ def check_docfields(text: str) -> list[dict[str, Any]]:
             check  : チェック種別 (FC0〜FC12)
             msg    : メッセージ (str)
     """
+    from ..preprocessor import detect_format, DocFormat
+    if detect_format(text) == DocFormat.JPLATPAT:
+        return []
+
     # 複数書類ファイル（出願形式）の判定
     shurui_matches = list(_SHURUI_LINE_PAT.finditer(text))
     if len(shurui_matches) >= 2:
         sections = _split_by_shurui(text)
         issues = _fc0_multi_doc(sections)
 
+        # 必須書類の存在確認（明細書・特許請求の範囲・要約書）
+        present = {name for name, _ in sections}
+        for req in ['明細書', '特許請求の範囲', '要約書']:
+            if req not in present:
+                issues.append({
+                    'level': 'error', 'check': 'FC0',
+                    'msg': f"【書類名】{req} が見つかりません（出願書類として必須です）。"
+                })
+
         meisho_list = [(name, t) for name, t in sections if name == '明細書']
         if not meisho_list:
-            issues.append({
-                'level': 'warning', 'check': 'FC0',
-                'msg': "【書類名】明細書 が見つかりません。明細書チェックをスキップします。"
-            })
             return issues
 
         meisho_text, obs_warns = normalize_obsolete_headings(meisho_list[0][1])

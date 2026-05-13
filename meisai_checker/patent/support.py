@@ -113,6 +113,37 @@ def _extract_impl_scope(desc):
     return desc[start:end]
 
 
+def _find_clause(body: str, noun: str) -> str:
+    """クレーム本文から noun を含む節（読点区切り）を返す。"""
+    idx = body.find(noun)
+    if idx == -1:
+        return noun
+    left = 0
+    for ch in ('、', '。', '】'):
+        pos = body.rfind(ch, 0, idx)
+        if pos != -1 and pos + 1 > left:
+            left = pos + 1
+    right = len(body)
+    for ch in ('、', '。'):
+        pos = body.find(ch, idx + len(noun))
+        if pos != -1 and pos + 1 < right:
+            right = pos + 1
+    clause = body[left:right].strip()
+    if len(clause) > 45:
+        rel = idx - left
+        start = max(0, rel - 12)
+        excerpt = clause[start:start + 45]
+        leading = start > 0
+        trailing = start + 45 < len(clause)
+        if leading:
+            close = excerpt.find('）')
+            open_ = excerpt.find('（')
+            if close != -1 and (open_ == -1 or close < open_):
+                excerpt = excerpt[close + 1:]
+        clause = ('…' if leading else '') + excerpt + ('…' if trailing else '')
+    return clause
+
+
 def check_support(claims, sections):
     """M6: サポート要件チェック（36条6項1号）。"""
     issues = []
@@ -160,12 +191,16 @@ def check_support(claims, sections):
         missing = sorted([n for n in nouns
                           if len(n) >= 2 and n not in impl_text])
         if missing:
+            lines = [f"請求項{num}：以下の語句が発明を実施するための形態に見当たりません。"]
+            for noun in missing[:12]:
+                clause = _find_clause(body, noun)
+                lines.append(f"  ・「{noun}」（用例：「{clause}」）")
+            if len(missing) > 12:
+                lines.append(f"  …他{len(missing) - 12}件")
             issues.append({
                 "milestone": "M6", "level": "warning",
                 "claim": num,
-                "msg": f"請求項{num}：実施形態に未記載の語句: "
-                       + "、".join(missing[:12])
-                       + ("…" if len(missing) > 12 else ""),
+                "msg": "\n".join(lines),
                 "missing_nouns": missing,
             })
     return issues, support_table
