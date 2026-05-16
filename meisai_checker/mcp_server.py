@@ -103,7 +103,7 @@ def patent_check_summary(text: str, source_format: str = "auto") -> str:
     }
     source_fmt = fmt_map.get(source_format, DocFormat.UNKNOWN)
     norm_doc = normalize(text, source_format=source_fmt)
-    result = analyze(norm_doc.text)
+    result = analyze(norm_doc.text, _skip_blocks=True)
     return _dump(_make_summary(result))
 
 
@@ -130,7 +130,7 @@ def patent_check_issues(text: str, level: str = "error", milestone: str = "all",
     }
     source_fmt = fmt_map.get(source_format, DocFormat.UNKNOWN)
     norm_doc = normalize(text, source_format=source_fmt)
-    result = analyze(norm_doc.text)
+    result = analyze(norm_doc.text, _skip_blocks=True)
     summary = _make_summary(result)
 
     if milestone == 'all':
@@ -163,7 +163,7 @@ def patent_check_issues(text: str, level: str = "error", milestone: str = "all",
             {'num': c['num'], 'kind': c['kind'], 'deps': c['deps'], 'preview': c['preview']}
             for c in result['claim_list']
         ],
-    }, ensure_ascii=False, indent=2)
+    })
 
 
 @mcp.tool()
@@ -186,7 +186,7 @@ def patent_check_m3(text: str, source_format: str = "auto") -> str:
     }
     source_fmt = fmt_map.get(source_format, DocFormat.UNKNOWN)
     norm_doc = normalize(text, source_format=source_fmt)
-    result = analyze(norm_doc.text)
+    result = analyze(norm_doc.text, _skip_blocks=True)
     errors = _filter_issues(result['issues']['m3'], 'error')
     return _dump({
         'errors': errors,
@@ -202,7 +202,7 @@ def patent_check_m3(text: str, source_format: str = "auto") -> str:
             }
             for g in result['noun_groups']
         ],
-    }, ensure_ascii=False, indent=2)
+    })
 
 
 @mcp.tool()
@@ -226,14 +226,14 @@ def patent_check_m4(text: str, source_format: str = "auto") -> str:
     }
     source_fmt = fmt_map.get(source_format, DocFormat.UNKNOWN)
     norm_doc = normalize(text, source_format=source_fmt)
-    result = analyze(norm_doc.text)
+    result = analyze(norm_doc.text, _skip_blocks=True)
     issues = result['issues']['m4']
     return _dump({
         'errors':     _filter_issues(issues, 'error'),
         'warnings':   [i for i in issues if i.get('level') == 'warning'],
         'fugo_table': result['fugo_table'],
         'var_table':  result['var_table'],
-    }, ensure_ascii=False, indent=2)
+    })
 
 
 @mcp.tool()
@@ -268,7 +268,7 @@ def patent_check_m7(text: str, source_format: str = "auto") -> str:
             'by_check': by_check,
         },
         'issues': issues,
-    }, ensure_ascii=False, indent=2)
+    })
 
 
 @mcp.tool()

@@ -71,7 +71,7 @@ from .patent.subcombination import (  # noqa: F401
 # メイン解析
 # ══════════════════════════════════════════════════════════
 
-def analyze(text):
+def analyze(text, _skip_blocks=False):
     """明細書テキストを完全解析。"""
     # 改行コード正規化: CRLF→LF, CR単独→LF
     text = text.replace('\r\n', '\n').replace('\r', '\n')
@@ -250,8 +250,9 @@ def analyze(text):
         "support_table":    support_table,
         "title":            title,
         "title_inv_types":  title_inv_types,
-        "blocks":           build_blocks(text, claims, m3_issues, m4_issues,
-                                         element_table, ref_hits, noun_groups),
+        "blocks":           [] if _skip_blocks else build_blocks(
+                                text, claims, m3_issues, m4_issues,
+                                element_table, ref_hits, noun_groups),
         "noun_groups":      noun_groups,
     }
 
