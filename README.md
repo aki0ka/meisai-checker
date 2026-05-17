@@ -208,8 +208,13 @@ uv run main.py        # GUI起動
 uv run -m meisai_checker.cli --help  # CLIヘルプ
 ```
 
-## ライセンス
+## ライセンスと謝辞
 
-MIT License
+本ツールは MIT ライセンスで配布しています。
+
+依存ライブラリ:
+- [fugashi](https://github.com/polm/fugashi) (MIT) — Python 向け MeCab ラッパー
+- MeCab (BSD) — Copyright © Taku Kudo, NTT
+- [unidic-lite](https://github.com/polm/unidic-lite) (BSD) — Copyright © UniDic Consortium / NINJAL
 
 
