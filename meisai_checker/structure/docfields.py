@@ -4,7 +4,7 @@ JPO出願手続ガイドライン（https://www.pcinfo.jpo.go.jp/guide/DocGuide.
 明細書の記録項目の必須性・順序・下位構造・番号規則を検査する。
 
 チェック項目:
-  FC1  必須項目の存在確認（【書類名】【発明の名称】）
+  FC1  必須項目の存在確認（【書類名】）※【発明の名称】は M5 (check_title) が担当
   FC2  項目の規定順序チェック
   FC3  同一項目の重複禁止
   FC4  【発明の概要】配下の必須項目（3項目のうち1つ以上）
@@ -119,12 +119,12 @@ def _extract_para_nums(text: str) -> list[tuple[int, int]]:
 def _fc1_required(headings: list[tuple[str, int]]) -> list[dict]:
     issues = []
     names = {h for h, _ in headings}
-    for req in ['書類名', '発明の名称']:
-        if req not in names:
-            issues.append({
-                'level': 'error', 'check': 'FC1',
-                'msg': f"【{req}】が存在しません（必須項目）。"
-            })
+    if '書類名' not in names:
+        issues.append({
+            'level': 'error', 'check': 'FC1',
+            'msg': "【書類名】が存在しません（必須項目）。"
+        })
+    # 【発明の名称】の有無は M5 (check_title) が担当するためここでは確認しない
     return issues
 
 
