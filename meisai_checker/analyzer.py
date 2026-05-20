@@ -56,6 +56,11 @@ from .textcheck.brackets import check_brackets
 from .textcheck.repetition import check_repetition
 from .textcheck.style import check_style
 from .textcheck.length import check_length
+from .textcheck.verbose import check_verbose
+from .textcheck.redundant import check_redundant
+from .textcheck.punctuation import check_punctuation
+from .textcheck.deictic import check_deictic
+from .textcheck.sentence_split import check_sentence_split
 from .patent.subcombination import (  # noqa: F401
     check_subcombination,
     check_other_device_internals,
@@ -193,7 +198,12 @@ def analyze(text, _skip_blocks=False):
     tc_issues = (check_brackets(sections) +
                  check_repetition(sections) +
                  check_style(sections) +
-                 check_length(_raw_sections))
+                 check_length(_raw_sections) +
+                 check_verbose(sections) +
+                 check_redundant(sections) +
+                 check_punctuation(sections) +
+                 check_deictic(sections) +
+                 check_sentence_split(_raw_sections))
 
     # G1: 文法チェック（Layer 5: MeCab必須）
     try:

@@ -13,7 +13,7 @@
 
 ---
 
-## 現在の実装状況（2026-04-11 更新）
+## 現在の実装状況（2026-05-20 更新）
 
 ### 実装済みチェック
 
@@ -30,7 +30,12 @@
 | TC1 | check_brackets | textcheck/brackets.py | 括弧対応の整合性 |
 | TC2 | check_repetition | textcheck/repetition.py | 語句・句読点の繰り返し |
 | TC3 | check_style | textcheck/style.py | 敬体（です・ます）混入検出 |
-| TC4 | check_length | textcheck/length.py | 一文200文字超の警告 |
+| TC4 | check_length | textcheck/length.py | 一文120文字超の警告（特許ライティングマニュアル 1-1） |
+| TC5 | check_verbose | textcheck/verbose.py | 冗長表現（することができる・ものである・を行う・仕様上の等）（マニュアル 6-1, 7-5, 7-6） |
+| TC6 | check_redundant | textcheck/redundant.py | 意味重複（約〜程度・各〜毎・まず初めに等）・数値範囲の桁揃え（マニュアル 2-3, 6-2） |
+| TC7 | check_punctuation | textcheck/punctuation.py | 読点欠落（接続語句・ので・ため等の後）（マニュアル 5-2, 5-3） |
+| TC8 | check_deictic | textcheck/deictic.py | こそあど指示代名詞（これ・それ等）（マニュアル 7-3） |
+| TC9 | check_sentence_split | textcheck/sentence_split.py | 文中箇条書き・長いかっこ書き（マニュアル 1-3, 1-4） |
 | G1 | check_particles | grammar/particles.py | 同一助詞連続・「の」過剰連鎖（MeCab使用） |
 
 ### パッケージ構成
@@ -57,6 +62,11 @@ meisai_checker/
     repetition.py        ← check_repetition（TC2）
     style.py             ← check_style（TC3）
     length.py            ← check_length（TC4）
+    verbose.py           ← check_verbose（TC5）
+    redundant.py         ← check_redundant（TC6）
+    punctuation.py       ← check_punctuation（TC7）
+    deictic.py           ← check_deictic（TC8）
+    sentence_split.py    ← check_sentence_split（TC9）
   structure/
     abstract.py          ← check_abstract
     sections.py          ← check_structure, check_para_nums, check_midashi_numbers
