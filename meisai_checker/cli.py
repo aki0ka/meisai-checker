@@ -50,7 +50,8 @@ def _make_summary(result):
         issues = result['issues'][mid]
         e = sum(1 for i in issues if i.get('level') == 'error')
         w = sum(1 for i in issues if i.get('level') == 'warning')
-        by_ms[mid] = {'error': e, 'warning': w, 'total': len(issues)}
+        n = sum(1 for i in issues if i.get('level') == 'info')
+        by_ms[mid] = {'error': e, 'warning': w, 'info': n, 'total': len(issues)}
         total_error   += e
         total_warning += w
     return {
@@ -336,6 +337,7 @@ def main():
                     parts = []
                     if ms['error']:   parts.append(f"error:{ms['error']}")
                     if ms['warning']: parts.append(f"warning:{ms['warning']}")
+                    if ms['info']:    parts.append(f"info:{ms['info']}")
                     tag = ' / '.join(parts) if parts else 'OK'
                     print(f"    {ml}: {tag}")
                 print()
