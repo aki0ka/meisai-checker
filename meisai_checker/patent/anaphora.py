@@ -5,6 +5,7 @@
 """
 
 from __future__ import annotations
+import re
 
 from ..tokenizer import (
     _tokenize,
@@ -16,6 +17,9 @@ from ..tokenizer import (
     _ZENSHOU_WORDS,
     _TOUGAI_WORDS,
 )
+
+# 「請求項Nに記載の」形式の引用句パターン（独立導入ではなく依存参照）
+_CLAIM_REF_PAT = re.compile(r'請求項[\d０-９]+[、ないし乃至〜～\d０-９]*に記載の.{0,5}$')
 
 
 def get_all_ancestors(num, dep_map, _cache=None):
@@ -44,6 +48,8 @@ def _scope_tokens_for_parent(parent, dep_map, claims, cache):
 def _bare_occurrence_claims(noun, scope_claims_dict):
     """nounが照応詞なしに出現する請求項番号のセットを返す（唯一性チェック用）。
     同一請求項内の複数出現（発明種類宣言の繰り返し等）はまとめて1件として数える。
+
+    除外: 「請求項Nに記載の」形式の引用句直後の出現（依存参照であり独立導入でない）。
     """
     found_in = set()
     for claim_num, body in scope_claims_dict.items():
@@ -55,6 +61,19 @@ def _bare_occurrence_claims(noun, scope_claims_dict):
             pre2 = body[max(0, pos - 2):pos]
             pre1 = body[max(0, pos - 1):pos]
             if pre2 not in ('前記', '上記', '当該') and pre1 != '該':
+                # 「請求項Nに記載の〜」形式は独立導入でなく依存参照→除外
+                prefix_text = body[max(0, pos - 30):pos]
+                if _CLAIM_REF_PAT.search(prefix_text):
+                    idx = pos + 1
+                    continue
+                # 「前記Xのnoun」パターン（修飾語付き複合NP）→除外
+                # 例: 「前記ＰＤＰのテンプレートコスト」の"テンプレートコスト"は
+                #     "前記ＰＤＰ"で照応されているため独立導入ではない
+                if pre1 == 'の':
+                    pre_no = body[max(0, pos - 20):pos - 1]
+                    if any(z in pre_no for z in ('前記', '上記', '当該', '該')):
+                        idx = pos + 1
+                        continue
                 found_in.add(claim_num)
                 break
             idx = pos + 1

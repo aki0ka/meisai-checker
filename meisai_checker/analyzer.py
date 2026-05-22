@@ -33,7 +33,7 @@ from .structure.sections import (  # noqa: F401
     _heading_type, _HEADING_TYPE1, _HEADING_TYPE2, _HEADING_TYPE2_NOCHECK,
     _HEADING_TYPE3, _HEADING_TYPE4_PAT, _MEISHO_ITEMS, _NO_PARA_BETWEEN,
 )
-from .structure.ref_numbers import check_ref_numbers  # noqa: F401
+from .structure.ref_numbers import check_ref_numbers, check_figure_notation, check_figure_consistency  # noqa: F401
 from .patent.support import (  # noqa: F401
     check_support, extract_nouns_for_support, STOP_WORDS, _IMPL_SCOPE_END,
     _extract_impl_scope, _is_valid_support_noun,
@@ -164,8 +164,9 @@ def analyze(text, _skip_blocks=False):
     abstract_issues = check_abstract(sections)
     midashi_issues  = check_midashi_numbers(sections)
     ref_num_issues  = check_ref_numbers(text)
+    fig_issues      = check_figure_notation(sections) + check_figure_consistency(sections)
     m5_issues, title, title_inv_types = check_title(sections, claim_list)
-    m5_issues = struct_issues + para_issues + abstract_issues + midashi_issues + kuten_issues + jis_issues + m5_issues + ref_num_issues
+    m5_issues = struct_issues + para_issues + abstract_issues + midashi_issues + kuten_issues + jis_issues + m5_issues + ref_num_issues + fig_issues
     m6_issues, support_table = check_support(claims, sections)
 
     # M7: 明確性要件チェック（係り受け曖昧性・曖昧表現・非技術的事項）

@@ -479,6 +479,22 @@ def _noun_after_zenshou(tokens, zenshou_idx):
         return noun, span[0]['start'], span[-1]['end']
     return noun, fallback_end, fallback_end
 
+_LEADING_QUANT_PREFIXES = [
+    ('各', 1),
+    ('複数の', 3),
+    ('それぞれの', 5),
+    ('全ての', 4),
+    ('すべての', 5),
+    ('全部の', 4),
+]
+
+def _strip_leading_quantifier(noun):
+    """「各X」「複数のX」等の先頭量化子を除去して核名詞を返す。除去できなければそのまま返す。"""
+    for prefix, n in _LEADING_QUANT_PREFIXES:
+        if noun.startswith(prefix) and len(noun) > n:
+            return noun[n:]
+    return noun
+
 def _found_in_scope(noun, scope_tokens):
     """noun が scope_tokens の定義済み名詞句に完全一致するか判定。
 
@@ -486,17 +502,24 @@ def _found_in_scope(noun, scope_tokens):
     「所定の閾値」という先行詞があっても「前記閾値」はエラー
     → 書き手は「前記所定の閾値」と書くか、先に「閾値」を独立定義すべき。
 
-    例外: UniDicが「部内」「側面」等を複合名詞として一体化するケース。
+    例外1: UniDicが「部内」「側面」等を複合名詞として一体化するケース。
     「該収容部内」→ noun="収容部内" のとき、末尾の「内」(_LOC_SUFFIXES) を
     ストリップして「収容部」でも再検索する。
+
+    例外2: 量化子付き照応詞（「各X」「複数のX」等）。
+    「前記各送電コイル」→ noun="各送電コイル" のとき、先行詞DBには"送電コイル"のみ
+    登録されているケースがある。量化子を除去した核名詞でも再検索する。
     """
     defined = _collect_defined_nouns(scope_tokens)
     if noun in defined:
         return True
     # 末尾が位置接尾辞文字で終わる複合語（部内・領域内等）のフォールバック
-    # UniDicが位置語を名詞として一体化した場合、ベース名詞でも先行詞を探す
     if noun and noun[-1] in _LOC_SUFFIXES and len(noun) > 2:
         base = noun[:-1]
         if len(base) >= 2 and base in defined:
             return True
+    # 先頭量化子フォールバック（「各X」→「X」）
+    core = _strip_leading_quantifier(noun)
+    if core != noun and len(core) >= 2 and core in defined:
+        return True
     return False

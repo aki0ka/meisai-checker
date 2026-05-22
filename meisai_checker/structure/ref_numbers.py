@@ -5,6 +5,10 @@
   - １から始まっているか
   - 欠番・逆転なく連続しているか
   - 図のサフィックス英字（図８Ａ、図８Ｂ等）が順番（大文字小文字区別あり）に並んでいるか
+
+また以下も検出する：
+  - 本文中の「図X（a）」表記（PCT出願時に図XＡへ修正が必要）
+  - 本文が参照する図番号が【図面の簡単な説明】に存在しない場合
 """
 
 from __future__ import annotations
@@ -41,6 +45,13 @@ _CATEGORIES = [
 # サフィックスの先頭として許容する全角英字
 _LETTER_START_UPPER = 'Ａ'  # FF21
 _LETTER_START_LOWER = 'ａ'  # FF41
+
+# 本文中の図参照（図１、図１Ａ 等）─ 数字部のみ capture
+_FIG_BODY_RE = re.compile(r'図([０-９0-9]+)')
+# 図面の簡単な説明の図エントリ
+_FIG_DRAW_RE = re.compile(r'【図([０-９0-9]+)[Ａ-Ｚａ-ｚ]*】')
+# 図X（a）表記（全角・半角数字、全角括弧＋全角or半角英小文字）
+_FIG_PAREN_RE = re.compile(r'図([０-９0-9]+)（([ａ-ｚa-z])）')
 
 
 def _check_category(cat_name: str, entries: list[tuple[str, int, str]]) -> list[dict]:
@@ -124,6 +135,62 @@ def _check_category(cat_name: str, entries: list[tuple[str, int, str]]) -> list[
                             f'期待値: {cat_name}{znum}{expected}）'),
                 })
 
+    return issues
+
+
+def check_figure_notation(sections: dict) -> list[dict]:
+    """本文中の「図X（a）」表記を検出してinfoで告知。
+
+    PCT出願時に図XＡへ修正が必要になる表記。
+    「図Xの（a）では」と書き直すと国内・PCT双方で問題なく使える。
+    """
+    issues: list[dict] = []
+    desc = sections.get('description', '')
+    for m in _FIG_PAREN_RE.finditer(desc):
+        num_z = _int2zen(_zen2int(m.group(1)))
+        letter = m.group(2)
+        # 全角大文字に変換（全角小文字ａ=U+FF41、半角小文字a=U+0061 両対応）
+        base = ord('ａ') if ord(letter) > 127 else ord('a')
+        letter_z = chr(ord('Ａ') + (ord(letter) - base))
+        issues.append({
+            'milestone': 'M5', 'level': 'info',
+            'msg': (f'「{m.group(0)}」はPCT出願時に「図{num_z}{letter_z}」への'
+                    f'修正が必要になります。「図{num_z}の（{letter}）では」と'
+                    f'書き直すと回避できます。'),
+        })
+    return issues
+
+
+def check_figure_consistency(sections: dict) -> list[dict]:
+    """本文が参照する図番号が【図面の簡単な説明】に存在するか確認。
+
+    本文（発明の詳細な説明）に「図N」の参照があり、
+    【図面の簡単な説明】に対応する【図N】エントリがない場合にwarningを出す。
+    """
+    issues: list[dict] = []
+    desc = sections.get('description', '')
+    drawings = sections.get('drawings', '')
+
+    if not drawings:
+        return issues
+
+    draw_nums: set[int] = {
+        _zen2int(m.group(1)) for m in _FIG_DRAW_RE.finditer(drawings)
+    }
+    if not draw_nums:
+        return issues
+
+    body_nums: set[int] = {
+        _zen2int(m.group(1)) for m in _FIG_BODY_RE.finditer(desc)
+    }
+
+    for n in sorted(body_nums - draw_nums):
+        zn = _int2zen(n)
+        issues.append({
+            'milestone': 'M5', 'level': 'warning',
+            'msg': (f'本文中に「図{zn}」の参照がありますが、'
+                    f'【図面の簡単な説明】に【図{zn}】の記載がありません。'),
+        })
     return issues
 
 
