@@ -14,6 +14,8 @@ from ..tokenizer import (
     _collect_defined_nouns,
     _noun_after_zenshou,
     _found_in_scope,
+    _found_in_scope_ex,
+    _PAREN_PAT,
     _ZENSHOU_WORDS,
     _TOUGAI_WORDS,
 )
@@ -128,13 +130,24 @@ def check_zenshou(claims, dep_map):
 
             prefix = tokens[:i]  # 同一請求項の前方
 
+            _bridge_src = None
             if t['surf'] in _TOUGAI_WORDS:
                 # 当該・該：同一請求項の前方のみ
                 found = _found_in_scope(noun, prefix)
             else:
                 # 前記・上記
                 # まず同一請求項の前方で見つかれば常にOK
-                if _found_in_scope(noun, prefix):
+                _prefix_found, _bridge_src = _found_in_scope_ex(noun, prefix)
+                if _prefix_found:
+                    if _bridge_src:
+                        issues.append({
+                            'claim': num, 'level': 'info',
+                            'word': t['surf'], 'noun': noun,
+                            'msg': (f"請求項{num}：「{t['surf']}{noun}」の先行詞「{_bridge_src}」に"
+                                    f"スペルアウト括弧書きが含まれています。"
+                                    f"括弧書きを省いた「{_PAREN_PAT.sub('', _bridge_src)}」で"
+                                    f"先に導入することを推奨します。"),
+                        })
                     if verb_modified:
                         skipped = body[zenshou_end:noun_start]
                         issues.append({
@@ -153,13 +166,15 @@ def check_zenshou(claims, dep_map):
                     continue
                 if len(direct_parents) <= 1:
                     # 単項従属または独立：全祖先を結合してチェック
-                    found = _found_in_scope(noun, ancestor_tokens)
+                    found, _bridge_src = _found_in_scope_ex(noun, ancestor_tokens)
                 else:
                     # 多項従属：全ての直接親のスコープそれぞれで見つかる必要がある
-                    found = all(
-                        _found_in_scope(noun, _scope_tokens_for_parent(p, dep_map, claims, _cache))
+                    _parent_results = [
+                        _found_in_scope_ex(noun, _scope_tokens_for_parent(p, dep_map, claims, _cache))
                         for p in direct_parents
-                    )
+                    ]
+                    found = all(r[0] for r in _parent_results)
+                    _bridge_src = next((r[1] for r in _parent_results if r[1]), None)
 
             if not found:
                 suppressed = False
@@ -192,6 +207,15 @@ def check_zenshou(claims, dep_map):
                     })
             elif verb_modified:
                 # 先行詞は見つかったが「前記AしたB」パターン（祖先スコープから解決）
+                if _bridge_src:
+                    issues.append({
+                        'claim': num, 'level': 'info',
+                        'word': t['surf'], 'noun': noun,
+                        'msg': (f"請求項{num}：「{t['surf']}{noun}」の先行詞「{_bridge_src}」に"
+                                f"スペルアウト括弧書きが含まれています。"
+                                f"括弧書きを省いた「{_PAREN_PAT.sub('', _bridge_src)}」で"
+                                f"先に導入することを推奨します。"),
+                    })
                 skipped = body[zenshou_end:noun_start]
                 issues.append({
                     'claim': num, 'level': 'info',
@@ -201,7 +225,16 @@ def check_zenshou(claims, dep_map):
                             f"「{noun}」に固有の名称を与える書き方への切り替えを検討してください。"),
                 })
             elif t['surf'] not in _TOUGAI_WORDS:
-                # 前記/上記・先行詞あり・動詞修飾なし → 唯一性チェック
+                # 前記/上記・先行詞あり・動詞修飾なし → ブリッジ通知 + 唯一性チェック
+                if _bridge_src:
+                    issues.append({
+                        'claim': num, 'level': 'info',
+                        'word': t['surf'], 'noun': noun,
+                        'msg': (f"請求項{num}：「{t['surf']}{noun}」の先行詞「{_bridge_src}」に"
+                                f"スペルアウト括弧書きが含まれています。"
+                                f"括弧書きを省いた「{_PAREN_PAT.sub('', _bridge_src)}」で"
+                                f"先に導入することを推奨します。"),
+                    })
                 scope_dict = {a: claims.get(a, '') for a in ancestors | {num}}
                 bare = _bare_occurrence_claims(noun, scope_dict)
                 if len(bare) > 1 and (num, noun) not in _uniqueness_seen:

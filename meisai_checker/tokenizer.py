@@ -5,6 +5,7 @@
 名詞句抽出・照応詞認識・先行詞候補収集のコア実装。
 """
 import os
+import re
 import fugashi
 import unidic_lite
 
@@ -495,6 +496,66 @@ def _strip_leading_quantifier(noun):
             return noun[n:]
     return noun
 
+# スペルアウト括弧書きパターン（「ＧＮＳＳ（Global Navigation Satellite System）受信機」等）
+_PAREN_PAT = re.compile(r'（[^）]+）')
+
+
+def _spell_out_bridge(noun, scope_tokens):
+    """noun がスペルアウト括弧書きを含む形でスコープ内に定義されているか調べる。
+
+    MeCab は「ＧＮＳＳ（Global…）受信機」を ＧＮ|ＳＳ|（|Global|…|）|受信|機 と分割し、
+    _collect_defined_nouns は括弧内容を別名詞として登録する。
+    そのため、括弧付き noun は defined には入らない。
+
+    代わりにトークン surf 列を連結したスコープ文字列を使い、
+    noun の各文字の間に括弧書きが任意挿入されたパターンで regex 検索する。
+    マッチした場合、表示用に「noun の前半部（…）後半部」形式の文字列を返す。
+    """
+    # スコープ内で括弧付きトークンが存在しなければ即 None
+    if not any(t['surf'] == '（' for t in scope_tokens):
+        return None
+    scope_text = ''.join(t['surf'] for t in scope_tokens)
+    # noun を re.escape した各文字の間に (?:（[^）]+）)? を挟んだパターンを構築
+    # 例: "ＧＮＳＳ受信機" → Ｇ(?:（[^）]+）)?Ｎ(?:（...）)?Ｓ...機
+    chars = list(noun)
+    pattern = r'(?:（[^）]+）)?'.join(re.escape(c) for c in chars)
+    m = re.search(pattern, scope_text)
+    if m and m.group(0) != noun:
+        return m.group(0)  # 括弧書きを含む形（スコープ文字列から取得）
+    return None
+
+
+def _found_in_scope_ex(noun, scope_tokens):
+    """noun が scope_tokens 内の先行詞候補に一致するか判定。
+
+    戻り値: (found: bool, bridge_original: str | None)
+    bridge_original が非Noneの場合、スペルアウト括弧書き省略によるブリッジマッチを示す。
+
+    例外1: UniDicが「部内」等を複合名詞化するケース → 末尾位置接尾辞を除去して再検索。
+    例外2: 量化子付き照応詞（「各X」等） → 先頭量化子を除去して再検索。
+    例外3: スペルアウトブリッジ（「ＧＮＳＳ受信機」←「ＧＮＳＳ（…）受信機」）。
+    """
+    defined = _collect_defined_nouns(scope_tokens)
+    if noun in defined:
+        return True, None
+    if noun and noun[-1] in _LOC_SUFFIXES and len(noun) > 2:
+        base = noun[:-1]
+        if len(base) >= 2 and base in defined:
+            return True, None
+    core = _strip_leading_quantifier(noun)
+    if core != noun and len(core) >= 2 and core in defined:
+        return True, None
+    # スペルアウトブリッジフォールバック
+    bridge = _spell_out_bridge(noun, scope_tokens)
+    if bridge:
+        return True, bridge
+    if core != noun:
+        bridge2 = _spell_out_bridge(core, scope_tokens)
+        if bridge2:
+            return True, bridge2
+    return False, None
+
+
 def _found_in_scope(noun, scope_tokens):
     """noun が scope_tokens の定義済み名詞句に完全一致するか判定。
 
@@ -509,17 +570,9 @@ def _found_in_scope(noun, scope_tokens):
     例外2: 量化子付き照応詞（「各X」「複数のX」等）。
     「前記各送電コイル」→ noun="各送電コイル" のとき、先行詞DBには"送電コイル"のみ
     登録されているケースがある。量化子を除去した核名詞でも再検索する。
+
+    例外3: スペルアウトブリッジ（_found_in_scope_ex 参照）。
+    ブリッジ情報が不要な呼び出し元向けのシム。
     """
-    defined = _collect_defined_nouns(scope_tokens)
-    if noun in defined:
-        return True
-    # 末尾が位置接尾辞文字で終わる複合語（部内・領域内等）のフォールバック
-    if noun and noun[-1] in _LOC_SUFFIXES and len(noun) > 2:
-        base = noun[:-1]
-        if len(base) >= 2 and base in defined:
-            return True
-    # 先頭量化子フォールバック（「各X」→「X」）
-    core = _strip_leading_quantifier(noun)
-    if core != noun and len(core) >= 2 and core in defined:
-        return True
-    return False
+    found, _ = _found_in_scope_ex(noun, scope_tokens)
+    return found

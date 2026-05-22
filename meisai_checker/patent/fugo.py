@@ -75,6 +75,8 @@ FUGO_EXCLUDE_LIST = {
     '数', '化', '乃至',
     # 日付・年号（「平成３年」「昭和２０年」「令和５年」等）
     '年', '月', '日', '平成', '昭和', '令和',
+    # 通信規格名（後続数字が規格バージョンであり図面符号でない）
+    'Ｗｉ−ｆｉ', 'Ｗｉ−Ｆｉ', 'ＣＤＭＡ', 'ＯＦＤＭ', 'ＭＩＭＯ',
 }
 
 
@@ -541,7 +543,8 @@ def _extract_elements_tokens(text):
                             and all(_is_zenkaku_alpha(c) for c in alpha_run)
                             and j < n and _is_fugo_tok(tokens[j])
                             # 小文字混在（Ｒｉ等の変数添字）はパターンBでも除外
-                            and not any(_is_zenkaku_lower(c) for c in alpha_run)):
+                            and not any(_is_zenkaku_lower(c) for c in alpha_run)
+                            and not _is_fugo_exclude(alpha_run)):
                         # ＣＰＵ１０ パターン: alpha_run=ＣＰＵ, 数字=１０
                         fugo_parts, j = _collect_fugo_suffix(tokens, j)
                         fugo = ''.join(fugo_parts)
