@@ -101,6 +101,7 @@ def check_zenshou(claims, dep_map):
     """
     issues = []
     _cache = {}
+    _uniqueness_seen = set()  # (claim_num, noun) — 唯一性崩壊警告の重複排除
 
     for num in sorted(claims.keys()):
         body = claims[num]
@@ -146,7 +147,8 @@ def check_zenshou(claims, dep_map):
                     else:
                         scope_dict = {a: claims.get(a, '') for a in ancestors | {num}}
                         bare = _bare_occurrence_claims(noun, scope_dict)
-                        if len(bare) > 1:
+                        if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
+                            _uniqueness_seen.add((num, noun))
                             issues.append(_uniqueness_warning(num, t['surf'], noun, bare))
                     continue
                 if len(direct_parents) <= 1:
@@ -202,7 +204,8 @@ def check_zenshou(claims, dep_map):
                 # 前記/上記・先行詞あり・動詞修飾なし → 唯一性チェック
                 scope_dict = {a: claims.get(a, '') for a in ancestors | {num}}
                 bare = _bare_occurrence_claims(noun, scope_dict)
-                if len(bare) > 1:
+                if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
+                    _uniqueness_seen.add((num, noun))
                     issues.append(_uniqueness_warning(num, t['surf'], noun, bare))
     return issues
 
