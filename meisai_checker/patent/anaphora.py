@@ -18,10 +18,20 @@ from ..tokenizer import (
     _PAREN_PAT,
     _ZENSHOU_WORDS,
     _TOUGAI_WORDS,
+    _QUANT_MODS,
 )
 
 # 「請求項Nに記載の」形式の引用句パターン（独立導入ではなく依存参照）
 _CLAIM_REF_PAT = re.compile(r'請求項[\d０-９]+[、ないし乃至〜～\d０-９]*に記載の.{0,5}$')
+
+# 「前記/上記/当該/該 + (量化子) + noun」パターン検出用
+# 例: 前記各N, 前記複数のN, 上記すべてのN など
+_ZENSHOU_QUANT_PRE_PAT = re.compile(
+    r'(?:前記|上記|当該|該)(?:各|複数の|すべての|全ての|それぞれの|多数の|少数の)?$'
+)
+
+# 請求項前文（"…であって"/"…において" 以前）の終端を検出
+_PREAMBLE_END_PAT = re.compile(r'であって[、,]|において[、,]')
 
 
 def get_all_ancestors(num, dep_map, _cache=None):
@@ -51,26 +61,43 @@ def _bare_occurrence_claims(noun, scope_claims_dict):
     """nounが照応詞なしに出現する請求項番号のセットを返す（唯一性チェック用）。
     同一請求項内の複数出現（発明種類宣言の繰り返し等）はまとめて1件として数える。
 
-    除外: 「請求項Nに記載の」形式の引用句直後の出現（依存参照であり独立導入でない）。
+    除外:
+      - 「請求項Nに記載の」形式の引用句直後の出現（依存参照）
+      - 「前記/上記/当該/該 + (量化子) + noun」パターン（量化子が介在する照応詞）
+      - 「前記Xのnoun」パターン（修飾語付き複合NP）
+      - 請求項前文（"であって"/"において" 以前）のタイプ記述出現
     """
     found_in = set()
     for claim_num, body in scope_claims_dict.items():
+        # 前文終端位置を検出（それ以前の出現はタイプ記述として除外）
+        preamble_end = 0
+        m = _PREAMBLE_END_PAT.search(body)
+        if m:
+            preamble_end = m.end()
+
         idx = 0
         while True:
             pos = body.find(noun, idx)
             if pos < 0:
                 break
+            # 前文内の出現はタイプ記述→除外
+            if pos < preamble_end:
+                idx = pos + 1
+                continue
             pre2 = body[max(0, pos - 2):pos]
             pre1 = body[max(0, pos - 1):pos]
             if pre2 not in ('前記', '上記', '当該') and pre1 != '該':
+                # 「前記各N」「前記複数のN」等：量化子が介在する照応詞→除外
+                pre_window = body[max(0, pos - 10):pos]
+                if _ZENSHOU_QUANT_PRE_PAT.search(pre_window):
+                    idx = pos + 1
+                    continue
                 # 「請求項Nに記載の〜」形式は独立導入でなく依存参照→除外
                 prefix_text = body[max(0, pos - 30):pos]
                 if _CLAIM_REF_PAT.search(prefix_text):
                     idx = pos + 1
                     continue
                 # 「前記Xのnoun」パターン（修飾語付き複合NP）→除外
-                # 例: 「前記ＰＤＰのテンプレートコスト」の"テンプレートコスト"は
-                #     "前記ＰＤＰ"で照応されているため独立導入ではない
                 if pre1 == 'の':
                     pre_no = body[max(0, pos - 20):pos - 1]
                     if any(z in pre_no for z in ('前記', '上記', '当該', '該')):
@@ -124,6 +151,29 @@ def check_zenshou(claims, dep_map):
             noun, noun_start, _noun_end = _noun_after_zenshou(tokens, i)
             if not noun or len(noun) < 2:
                 continue
+
+            # 「量化子＋の＋前記X」パターン検出（例：「複数の前記端末」）
+            # ιで唯一選択した後に複数をかけるのは論理矛盾。「前記複数のX」等に書き換えるべき。
+            if (t['surf'] in _ZENSHOU_WORDS and t['surf'] not in _TOUGAI_WORDS
+                    and i >= 2
+                    and tokens[i - 1]['surf'] == 'の'
+                    and tokens[i - 2]['surf'] in _QUANT_MODS):
+                quant = tokens[i - 2]['surf']
+                issues.append({
+                    'claim': num, 'level': 'warning',
+                    'word': t['surf'], 'noun': noun,
+                    'msg': (
+                        f"請求項{num}：「{quant}の{t['surf']}{noun}」は"
+                        f"唯一の個体を定記述で選んだ後に量化をかける形です。"
+                        f"先行詞が「{quant}の{noun}」（集合）として導入されている場合は論理矛盾です。"
+                        f"意図に応じて次のいずれかに書き換えてください："
+                        f"「前記{quant}の{noun}」（群全体）、"
+                        f"「前記{quant}の{noun}のそれぞれ」（分配）、"
+                        f"「前記{quant}の{noun}のうちの少なくとも１つ」（部分）。"
+                        f"先行詞が裸名詞タイプとして導入されている場合でも、"
+                        f"先行詞側に「{quant}の{noun}」を明示する書き方が安全です。"
+                    ),
+                })
 
             zenshou_end = tokens[i]['end']
             verb_modified = noun_start > zenshou_end  # 「前記AしたB」パターン
