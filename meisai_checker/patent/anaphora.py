@@ -57,55 +57,24 @@ def _scope_tokens_for_parent(parent, dep_map, claims, cache):
     return toks
 
 
-def _bare_occurrence_claims(noun, scope_claims_dict):
-    """nounが照応詞なしに出現する請求項番号のセットを返す（唯一性チェック用）。
-    同一請求項内の複数出現（発明種類宣言の繰り返し等）はまとめて1件として数える。
+def _body_tokens(tokens, body_text):
+    """前文（であって/において以前）を除いた本文トークン列を返す。前文なしは全トークン。"""
+    m = _PREAMBLE_END_PAT.search(body_text)
+    if not m:
+        return tokens
+    end_pos = m.end()
+    return [t for t in tokens if t['start'] >= end_pos]
 
-    除外:
-      - 「請求項Nに記載の」形式の引用句直後の出現（依存参照）
-      - 「前記/上記/当該/該 + (量化子) + noun」パターン（量化子が介在する照応詞）
-      - 「前記Xのnoun」パターン（修飾語付き複合NP）
-      - 請求項前文（"であって"/"において" 以前）のタイプ記述出現
+
+def _bare_claims_tokenized(noun, scope_body_tokens):
+    """nounが本文（前文除外）に照応詞なしで出現する請求項番号のセットを返す。
+    _collect_defined_nouns が照応詞直後をスキップするため、照応詞付き出現は除外される。
     """
     found_in = set()
-    for claim_num, body in scope_claims_dict.items():
-        # 前文終端位置を検出（それ以前の出現はタイプ記述として除外）
-        preamble_end = 0
-        m = _PREAMBLE_END_PAT.search(body)
-        if m:
-            preamble_end = m.end()
-
-        idx = 0
-        while True:
-            pos = body.find(noun, idx)
-            if pos < 0:
-                break
-            # 前文内の出現はタイプ記述→除外
-            if pos < preamble_end:
-                idx = pos + 1
-                continue
-            pre2 = body[max(0, pos - 2):pos]
-            pre1 = body[max(0, pos - 1):pos]
-            if pre2 not in ('前記', '上記', '当該') and pre1 != '該':
-                # 「前記各N」「前記複数のN」等：量化子が介在する照応詞→除外
-                pre_window = body[max(0, pos - 10):pos]
-                if _ZENSHOU_QUANT_PRE_PAT.search(pre_window):
-                    idx = pos + 1
-                    continue
-                # 「請求項Nに記載の〜」形式は独立導入でなく依存参照→除外
-                prefix_text = body[max(0, pos - 30):pos]
-                if _CLAIM_REF_PAT.search(prefix_text):
-                    idx = pos + 1
-                    continue
-                # 「前記Xのnoun」パターン（修飾語付き複合NP）→除外
-                if pre1 == 'の':
-                    pre_no = body[max(0, pos - 20):pos - 1]
-                    if any(z in pre_no for z in ('前記', '上記', '当該', '該')):
-                        idx = pos + 1
-                        continue
-                found_in.add(claim_num)
-                break
-            idx = pos + 1
+    for claim_num, body_toks in scope_body_tokens.items():
+        defined = _collect_defined_nouns(body_toks)
+        if defined.get(noun, 0) > 0:
+            found_in.add(claim_num)
     return found_in
 
 
@@ -132,15 +101,32 @@ def check_zenshou(claims, dep_map):
     _cache = {}
     _uniqueness_seen = set()  # (claim_num, noun) — 唯一性崩壊警告の重複排除
 
+    # 全請求項をプリトークナイズ（繰り返し tokenize を避ける）
+    claim_tokens = {n: _tokenize(b) for n, b in claims.items()}
+    # 本文トークン列（前文除外）を事前に構築（唯一性チェック用）
+    claim_body_tokens = {n: _body_tokens(claim_tokens[n], b) for n, b in claims.items()}
+
     for num in sorted(claims.keys()):
         body = claims[num]
-        tokens = _tokenize(body)
+        tokens = claim_tokens[num]
+
+        # 前文に照応詞がある場合は警告（前文はタイプ表現のみにすべき）
+        m_pre = _PREAMBLE_END_PAT.search(body)
+        if m_pre:
+            preamble_text = body[:m_pre.end()]
+            if any(z in preamble_text for z in _ZENSHOU_WORDS):
+                issues.append({
+                    'claim': num, 'level': 'warning',
+                    'msg': (f"請求項{num}：前文（「であって/において」以前）に照応詞があります。"
+                            f"前文はタイプ表現のみにし、要素の導入・参照は本文で行ってください。"
+                            f"前文内の先行詞・照応詞はM3チェック対象外です。"),
+                })
 
         direct_parents = dep_map.get(num, [])
         ancestors = get_all_ancestors(num, dep_map, _cache)
         ancestor_tokens = []
         for a in sorted(ancestors):
-            ancestor_tokens += _tokenize(claims.get(a, ''))
+            ancestor_tokens += claim_tokens.get(a, [])
 
         for i, t in enumerate(tokens):
             if t['surf'] not in _ZENSHOU_WORDS:
@@ -208,8 +194,8 @@ def check_zenshou(claims, dep_map):
                                     f"「{noun}」に固有の名称を与える書き方への切り替えを検討してください。"),
                         })
                     else:
-                        scope_dict = {a: claims.get(a, '') for a in ancestors | {num}}
-                        bare = _bare_occurrence_claims(noun, scope_dict)
+                        scope_body_toks = {a: claim_body_tokens[a] for a in ancestors | {num} if a in claim_body_tokens}
+                        bare = _bare_claims_tokenized(noun, scope_body_toks)
                         if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
                             _uniqueness_seen.add((num, noun))
                             issues.append(_uniqueness_warning(num, t['surf'], noun, bare))
@@ -285,8 +271,8 @@ def check_zenshou(claims, dep_map):
                                 f"括弧書きを省いた「{_PAREN_PAT.sub('', _bridge_src)}」で"
                                 f"先に導入することを推奨します。"),
                     })
-                scope_dict = {a: claims.get(a, '') for a in ancestors | {num}}
-                bare = _bare_occurrence_claims(noun, scope_dict)
+                scope_body_toks = {a: claim_body_tokens[a] for a in ancestors | {num} if a in claim_body_tokens}
+                bare = _bare_claims_tokenized(noun, scope_body_toks)
                 if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
                     _uniqueness_seen.add((num, noun))
                     issues.append(_uniqueness_warning(num, t['surf'], noun, bare))
@@ -304,7 +290,7 @@ def extract_noun_phrase_after(text, pos):
 
 
 def extract_defined_nouns(text):
-    """テキスト中の名詞句集合を返す（_collect_defined_nounsのテキスト版ラッパー）。"""
+    """テキスト中の名詞句を収集して {名詞句: 登録回数} を返す。"""
     tokens = _tokenize(text)
     return _collect_defined_nouns(tokens)
 
@@ -332,7 +318,7 @@ def build_noun_groups(claims, dep_map, ref_hits, m3_issues):
                          if i.get('level') == 'error' and 'word' not in i}
     info_set = {(i['claim'], i['noun'], i.get('word', '')) for i in m3_issues
                 if i.get('level') == 'info'}
-    warning_set = {(i['claim'], i['noun'], i.get('word', '')) for i in m3_issues
+    warning_set = {(i['claim'], i.get('noun', ''), i.get('word', '')) for i in m3_issues
                    if i.get('level') == 'warning'}
 
     # ref_hitsを名詞句でグループ化

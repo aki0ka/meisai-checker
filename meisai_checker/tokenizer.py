@@ -311,8 +311,8 @@ def _span_to_str(span):
     return ''.join(t['surf'] for t in span)
 
 def _collect_defined_nouns(tokens):
-    """トークン列から定義済み名詞句を収集（先行詞候補集合）。"""
-    nouns = set()
+    """トークン列から定義済み名詞句を収集（名詞句→登録回数）。"""
+    nouns = {}
     i = 0
     n = len(tokens)
     # 形式名詞・副詞可能名詞・副詞・感動詞は単独では先行詞候補に登録しない
@@ -348,7 +348,7 @@ def _collect_defined_nouns(tokens):
                        or s in _SKIP_EXTRA
                        or (len(span) == 1 and _is_formal_noun_tok(span[0])))
             if not is_skip:
-                nouns.add(s)
+                nouns[s] = nouns.get(s, 0) + 1
                 # 量化修飾+核名詞 → 核名詞を先行詞候補として追加登録
                 # パターンA: LIMITER + 'の' + 核名詞  例:「複数の送信波」→「送信波」
                 # パターンB: 接頭辞(各/毎等) + 核名詞  例:「各送信波」→「送信波」
@@ -361,13 +361,13 @@ def _collect_defined_nouns(tokens):
                                 and k + 2 < len(span)):
                             core = _span_to_str(span[k+2:])
                             if len(core) >= 2 and core not in _SKIP_EXTRA:
-                                nouns.add(core)
+                                nouns[core] = nouns.get(core, 0) + 1
                             break
                         # パターンB: 接頭辞 + 名詞句（各送信波、毎送信等）
                         if (tok_k['pos'] == '接頭辞' and _is_noun_tok(tok_k1)):
                             core = _span_to_str(span[k+1:])
                             if len(core) >= 2 and core not in _SKIP_EXTRA:
-                                nouns.add(core)
+                                nouns[core] = nouns.get(core, 0) + 1
                             break
                 # パターンC: 末尾トークンが数詞（符号番号）の場合
                 # 「収容部２０」→「収容部」もベース名詞として登録
@@ -375,7 +375,7 @@ def _collect_defined_nouns(tokens):
                 if (len(span) >= 2 and span[-1]['pos1'] == '数詞'):
                     base = _span_to_str(span[:-1])
                     if len(base) >= 2 and base not in _SKIP_EXTRA:
-                        nouns.add(base)
+                        nouns[base] = nouns.get(base, 0) + 1
             i += len(span) if span else 1
         else:
             i += 1
