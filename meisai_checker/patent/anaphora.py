@@ -66,14 +66,31 @@ def _body_tokens(tokens, body_text):
     return [t for t in tokens if t['start'] >= end_pos]
 
 
-def _bare_claims_tokenized(noun, scope_body_tokens):
+def _bare_claims_tokenized(noun, scope_body_items):
     """nounが本文（前文除外）に照応詞なしで出現する請求項番号のセットを返す。
-    _collect_defined_nouns が照応詞直後をスキップするため、照応詞付き出現は除外される。
+
+    scope_body_items: dict[claim_num, (body_tokens, body_text)]
+    - _collect_defined_nouns が照応詞直後をスキップするため、照応詞付き出現は除外される。
+    - 「請求項Nに記載の〜」形式の依存参照末尾は除外（_CLAIM_REF_PAT）。
     """
     found_in = set()
-    for claim_num, body_toks in scope_body_tokens.items():
+    for claim_num, (body_toks, body_text) in scope_body_items.items():
         defined = _collect_defined_nouns(body_toks)
-        if defined.get(noun, 0) > 0:
+        if defined.get(noun, 0) == 0:
+            continue
+        # 全出現が「請求項Nに記載の〜」依存参照であれば除外
+        has_bare = False
+        idx = 0
+        while True:
+            pos = body_text.find(noun, idx)
+            if pos < 0:
+                break
+            pre = body_text[max(0, pos - 30):pos]
+            if not _CLAIM_REF_PAT.search(pre):
+                has_bare = True
+                break
+            idx = pos + 1
+        if has_bare:
             found_in.add(claim_num)
     return found_in
 
@@ -103,15 +120,18 @@ def check_zenshou(claims, dep_map):
 
     # 全請求項をプリトークナイズ（繰り返し tokenize を避ける）
     claim_tokens = {n: _tokenize(b) for n, b in claims.items()}
-    # 本文トークン列（前文除外）を事前に構築（唯一性チェック用）
-    claim_body_tokens = {n: _body_tokens(claim_tokens[n], b) for n, b in claims.items()}
+    # 本文トークン列（前文除外）と本文テキストのペアを構築（唯一性チェック用）
+    claim_body_items = {
+        n: (_body_tokens(claim_tokens[n], b), b) for n, b in claims.items()
+    }
 
     for num in sorted(claims.keys()):
         body = claims[num]
         tokens = claim_tokens[num]
 
         # 前文に照応詞がある場合は警告（前文はタイプ表現のみにすべき）
-        m_pre = _PREAMBLE_END_PAT.search(body)
+        # 「するステップにおいて」等の従属節は除外（lookbehind で ステップ を除く）
+        m_pre = re.search(r'であって[、,]|(?<!ステップ)において[、,]', body)
         if m_pre:
             preamble_text = body[:m_pre.end()]
             if any(z in preamble_text for z in _ZENSHOU_WORDS):
@@ -194,7 +214,7 @@ def check_zenshou(claims, dep_map):
                                     f"「{noun}」に固有の名称を与える書き方への切り替えを検討してください。"),
                         })
                     else:
-                        scope_body_toks = {a: claim_body_tokens[a] for a in ancestors | {num} if a in claim_body_tokens}
+                        scope_body_toks = {a: claim_body_items[a] for a in ancestors | {num} if a in claim_body_items}
                         bare = _bare_claims_tokenized(noun, scope_body_toks)
                         if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
                             _uniqueness_seen.add((num, noun))
@@ -271,7 +291,7 @@ def check_zenshou(claims, dep_map):
                                 f"括弧書きを省いた「{_PAREN_PAT.sub('', _bridge_src)}」で"
                                 f"先に導入することを推奨します。"),
                     })
-                scope_body_toks = {a: claim_body_tokens[a] for a in ancestors | {num} if a in claim_body_tokens}
+                scope_body_toks = {a: claim_body_items[a] for a in ancestors | {num} if a in claim_body_items}
                 bare = _bare_claims_tokenized(noun, scope_body_toks)
                 if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
                     _uniqueness_seen.add((num, noun))
