@@ -15,6 +15,16 @@ from ..tokenizer import (
     _tokenize, _is_formal_noun_tok, _collect_defined_nouns,
 )
 
+# 動詞サポートチェック用ストップワード（助動詞的・クレーム構文骨格）
+_VERB_STOP = {
+    'する', 'ある', 'いる', 'なる', 'できる', 'みる', 'くる', 'いく',
+    '行う', '行なう', 'もちいる', 'かかる',
+    '備える', '有する', '含む', '持つ',
+}
+
+# 格助詞「に・で・を」直後の動詞は文法的用法（による・において等）として除外
+_NI_PARTICLE = {'に', 'で', 'を'}
+
 
 # サポート要件チェック用ストップワード
 STOP_WORDS = {
@@ -80,6 +90,27 @@ def _extract_defined_nouns(text):
     Phase 1-7 完了後は patent.anaphora.extract_defined_nouns に統合予定。
     """
     return _collect_defined_nouns(_tokenize(text))
+
+
+def extract_verbs_for_support(text):
+    """サポート要件チェック用の動詞基本形抽出。
+    格助詞直後の文法的動詞（による・において等）と汎用動詞を除外し、
+    発明の技術的動作を表す動詞のみを返す。
+    """
+    clean = re.sub(r'前記|上記|当該|該', '', text)
+    clean = re.sub(r'請求項[０-９0-9一二三四五六七八九十１-９]+', '', clean)
+    toks = _tokenize(clean)
+    verbs = set()
+    for i, t in enumerate(toks):
+        if t['pos'] != '動詞' or t['pos1'] != '一般':
+            continue
+        prev = toks[i - 1] if i > 0 else None
+        if prev and prev['pos'] == '助詞' and prev['surf'] in _NI_PARTICLE:
+            continue
+        b = t['base'].split('-')[0]  # MeCabがbaseに品詞ラベルを混入する場合の対処
+        if len(b) >= 2 and b not in _VERB_STOP:
+            verbs.add(b)
+    return verbs
 
 
 def extract_nouns_for_support(text):
@@ -188,19 +219,28 @@ def check_support(claims, sections):
     for num in sorted(claims.keys()):
         body = claims[num]
         nouns = extract_nouns_for_support(body)
-        missing = sorted([n for n in nouns
-                          if len(n) >= 2 and n not in impl_text])
-        if missing:
-            lines = [f"請求項{num}：以下の語句が発明を実施するための形態に見当たりません。"]
-            for noun in missing[:12]:
+        missing_nouns = sorted([n for n in nouns
+                                 if len(n) >= 2 and n not in impl_text])
+        verbs = extract_verbs_for_support(body)
+        missing_verbs = sorted([v for v in verbs if v not in impl_text])
+
+        if missing_nouns or missing_verbs:
+            lines = [f"請求項{num}：以下の語句・動詞が発明を実施するための形態に見当たりません。"]
+            for noun in missing_nouns[:12]:
                 clause = _find_clause(body, noun)
                 lines.append(f"  ・「{noun}」（用例：「{clause}」）")
-            if len(missing) > 12:
-                lines.append(f"  …他{len(missing) - 12}件")
+            if len(missing_nouns) > 12:
+                lines.append(f"  …他{len(missing_nouns) - 12}件")
+            for verb in missing_verbs[:6]:
+                clause = _find_clause(body, verb[:-1])  # 活用語尾を除いて検索
+                lines.append(f"  ・「{verb}」〔動詞〕（用例：「{clause}」）")
+            if len(missing_verbs) > 6:
+                lines.append(f"  …他{len(missing_verbs) - 6}件（動詞）")
             issues.append({
                 "milestone": "M6", "level": "warning",
                 "claim": num,
                 "msg": "\n".join(lines),
-                "missing_nouns": missing,
+                "missing_nouns": missing_nouns,
+                "missing_verbs": missing_verbs,
             })
     return issues, support_table
