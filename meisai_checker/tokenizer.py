@@ -294,6 +294,11 @@ def _noun_span(tokens, start_idx):
         elif t['pos'] == '記号' and t['surf'] in ('・', '／'):
             span.append(t)
             i += 1
+        elif (t['pos'] == '動詞' and t['pos1'] == '一般'
+              and span and i + 1 < n and _is_noun_tok(tokens[i + 1])):
+            # 動詞連用形が名詞列に挟まれた複合語（位置決め工程・孔あけ工程等）
+            span.append(t)
+            i += 1
         else:
             break
 
