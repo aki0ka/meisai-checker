@@ -38,6 +38,9 @@ _ZENSHOU_QUANT_PRE_PAT = re.compile(
 # 請求項前文（"…であって"/"…において" 以前）の終端を検出
 _PREAMBLE_END_PAT = re.compile(r'であって[、,]|において[、,]')
 
+# 複合位置語（2文字以上）：「基板直下」→「基板」+「直下」のように名詞境界を侵害するケース
+_LOC_COMPOUND = ['直下', '近傍', '直上', '直前', '直後', '付近', '周辺', '周囲', '近傍部', '周り']
+
 
 def get_all_ancestors(num, dep_map, _cache=None):
     """指定請求項の全祖先（直接・間接の従属元）を再帰的に収集する"""
@@ -100,6 +103,16 @@ def _bare_claims_tokenized(noun, scope_body_items):
             continue
         found_in.add(claim_num)
     return found_in
+
+
+def _loc_compound_hint(noun, scope_tokens):
+    """nounが複合位置語で終わり、基底名詞がスコープ内に定義されていれば (base, loc) を返す。"""
+    for loc in _LOC_COMPOUND:
+        if noun.endswith(loc) and len(noun) > len(loc):
+            base = noun[:-len(loc)]
+            if len(base) >= 2 and _found_in_scope(base, scope_tokens):
+                return base, loc
+    return None, None
 
 
 def _uniqueness_warning(num, surf, noun, bare_claims):
@@ -275,6 +288,11 @@ def check_zenshou(claims, dep_map):
                                   if dep_chain else "")
                     else:
                         detail = "（当該・該のスコープは従属元を含みません）"
+                    # 複合位置語ヒント：「前記基板直下」→「基板」が定義済みなら書き換えを提案
+                    full_scope = ancestor_tokens + tokens[:i]
+                    base, loc = _loc_compound_hint(noun, full_scope)
+                    if base:
+                        detail += f"。「{base}」は定義済みです。「{t['surf']}{base}の{loc}」と書き換えることを検討してください"
                     issues.append({
                         'claim': num, 'level': 'error',
                         'word': t['surf'], 'noun': noun,
