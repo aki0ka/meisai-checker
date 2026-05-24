@@ -76,27 +76,29 @@ def _bare_claims_tokenized(noun, scope_body_items):
 
     scope_body_items: dict[claim_num, (body_tokens, body_text)]
     - _collect_defined_nouns が照応詞直後をスキップするため、照応詞付き出現は除外される。
-    - 「請求項Nに記載の〜」形式の依存参照末尾は除外（_CLAIM_REF_PAT）。
+    - noun が1回でも「請求項Nに記載の〜」形式で出現する請求項は「継承」とみなし除外。
+      （末尾の発明種類表現「ことを特徴とするX」等で再出現しても独立定義として扱わない）
     """
     found_in = set()
     for claim_num, (body_toks, body_text) in scope_body_items.items():
         defined = _collect_defined_nouns(body_toks)
         if defined.get(noun, 0) == 0:
             continue
-        # 全出現が「請求項Nに記載の〜」依存参照であれば除外
-        has_bare = False
+        # noun が請求項引用で導入されている請求項は継承とみなして除外
+        is_inherited = False
         idx = 0
         while True:
             pos = body_text.find(noun, idx)
             if pos < 0:
                 break
             pre = body_text[max(0, pos - 30):pos]
-            if not _CLAIM_REF_PAT.search(pre):
-                has_bare = True
+            if _CLAIM_REF_PAT.search(pre):
+                is_inherited = True
                 break
             idx = pos + 1
-        if has_bare:
-            found_in.add(claim_num)
+        if is_inherited:
+            continue
+        found_in.add(claim_num)
     return found_in
 
 
@@ -219,8 +221,20 @@ def check_zenshou(claims, dep_map):
                                     f"「{noun}」に固有の名称を与える書き方への切り替えを検討してください。"),
                         })
                     else:
-                        scope_body_toks = {a: claim_body_items[a] for a in ancestors | {num} if a in claim_body_items}
-                        bare = _bare_claims_tokenized(noun, scope_body_toks)
+                        if len(direct_parents) > 1:
+                            # 多項従属: 各親スコープで独立して唯一性を評価。
+                            # 「請求項1又は2に記載の〜」は一方を選べば必ず一意なので、
+                            # いずれか1つの親スコープ内で複数定義がある場合のみ警告する。
+                            bare = set()
+                            for parent in direct_parents:
+                                p_ancs = get_all_ancestors(parent, dep_map, _cache) | {parent}
+                                p_items = {a: claim_body_items[a] for a in p_ancs if a in claim_body_items}
+                                p_bare = _bare_claims_tokenized(noun, p_items)
+                                if len(p_bare) > 1:
+                                    bare |= p_bare
+                        else:
+                            scope_body_toks = {a: claim_body_items[a] for a in ancestors | {num} if a in claim_body_items}
+                            bare = _bare_claims_tokenized(noun, scope_body_toks)
                         if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
                             _uniqueness_seen.add((num, noun))
                             issues.append(_uniqueness_warning(num, t['surf'], noun, bare))
