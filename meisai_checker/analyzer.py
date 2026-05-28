@@ -172,11 +172,12 @@ def analyze(text, _skip_blocks=False):
     # M7: 明確性要件チェック（係り受け曖昧性・曖昧表現・非技術的事項）
     try:
         from .patent.ambiguity import check_ambiguity
-        from .patent.clarity import check_vague_range, check_nontechnical
+        from .patent.clarity import check_vague_range, check_nontechnical, check_relative_expression
         m7_issues = (
             check_ambiguity(claims)
             + check_vague_range(claims, kinds)
             + check_nontechnical(claims)
+            + check_relative_expression(claims, kinds, sections)
         )
     except Exception:
         m7_issues = []

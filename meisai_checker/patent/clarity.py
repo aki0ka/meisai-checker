@@ -151,3 +151,162 @@ def check_nontechnical(claims: dict[int, str]) -> list[dict[str, Any]]:
                 })
 
     return issues
+
+
+# ══════════════════════════════════════════════════════════
+# 相対表現・程度副詞の検出
+# ══════════════════════════════════════════════════════════
+
+_DEGREE_ADVERBS: list[str] = [
+    '非常に', '極めて', '著しく', '大幅に', '格段に',
+    '飛躍的に', '大いに', '甚だしく', '相当に', 'かなり',
+    '十分に', '十二分に', 'はるかに', '遥かに',
+]
+
+_RELATIVE_ADJECTIVES: list[str] = [
+    '高い', '低い', '速い', '早い', '遅い', '多い', '少ない',
+    '大きい', '小さい', '良い', 'よい', '悪い', '強い', '弱い',
+    '長い', '短い', '重い', '軽い', '広い', '狭い',
+    '深い', '浅い', '厚い', '薄い', '硬い', '柔らかい',
+]
+
+_CHANGE_VERB_STEMS: list[str] = [
+    '向上', '低下', '改善', '悪化', '増加', '減少',
+    '拡大', '縮小', '増大', '軽減', '低減', '促進',
+    '抑制', '強化', '劣化', '増強', '減衰', '効率化',
+    '最適化', '簡略化', '複雑化',
+]
+
+_CHANGE_VERB_STEM_PAT = re.compile(
+    r'(?:' + '|'.join(_CHANGE_VERB_STEMS) + r')'
+    r'(?:し|する|され|させ|した|して|しない|すれ|させる|させた|させて|できる)',
+    re.UNICODE,
+)
+
+_CHANGE_WAGO_PAT = re.compile(
+    r'高ま|高め|増え|増やし|増やす|減る|減り|減らし|減らす'
+    r'|上がり|上がる|上げ|下がり|下がる|下げ'
+    r'|伸び|縮み|縮ま|縮め|強ま|強め|弱ま|弱め'
+    r'|広がり|広がる|広げ|狭ま|狭め|深ま|深め|薄ま|薄め'
+    r'|抑え',
+    re.UNICODE,
+)
+
+_COMPARISON_BASIS_PAT = re.compile(
+    r'比べ|比較|より(?:も)?|に対し|を用いない|しない場合|がない場合|従来|前者|後者',
+    re.UNICODE,
+)
+
+_CORRELATION_CONNECTIVE_PAT = re.compile(
+    r'ほど|につれ|に応じ|に伴い|に比例|に従って',
+    re.UNICODE,
+)
+
+# 「〜てもよい」「〜でもよい」「であってよい」等の許可表現を除去（よい の誤検知防止）
+_PERMISSIVE_YOKU_PAT = re.compile(
+    r'(?:て|で)も?(?:よい|良い|よく)|であっ(?:ても)?(?:よい|良い)',
+    re.UNICODE,
+)
+
+_RELATIVE_CITE = '（特許法36条6項2号）'
+
+
+def _has_change_verb(text: str) -> bool:
+    return bool(_CHANGE_VERB_STEM_PAT.search(text) or _CHANGE_WAGO_PAT.search(text))
+
+
+def _is_correlation_expr(sentence: str) -> bool:
+    """連動語の前後それぞれに変化動詞があれば連動表現とみなす。"""
+    m = _CORRELATION_CONNECTIVE_PAT.search(sentence)
+    if not m:
+        return False
+    return _has_change_verb(sentence[:m.start()]) and _has_change_verb(sentence[m.end():])
+
+
+def _split_sentences(text: str) -> list[str]:
+    return [s.strip() for s in re.split(r'[。．]', text) if s.strip()]
+
+
+def _check_sentence_relative(
+    sentence: str,
+    context: str,
+    level: str,
+) -> list[dict[str, Any]]:
+    issues: list[dict] = []
+
+    # ① 程度副詞（無条件）
+    for adv in _DEGREE_ADVERBS:
+        if adv in sentence:
+            issues.append({
+                'level': level,
+                'check': 'clarity_relative',
+                'msg': (
+                    f'{context}：程度副詞「{adv}」は技術的根拠になりません。'
+                    f'具体的な数値または条件で記載してください。'
+                    f'{_RELATIVE_CITE}'
+                ),
+            })
+
+    # ② 相対形容詞（同一文に比較基準なければ警告）
+    # 「〜てもよい」等の許可表現を除去してから判定
+    sentence_adj = _PERMISSIVE_YOKU_PAT.sub('', sentence)
+    if not _COMPARISON_BASIS_PAT.search(sentence):
+        for adj in _RELATIVE_ADJECTIVES:
+            if adj in sentence_adj:
+                issues.append({
+                    'level': level,
+                    'check': 'clarity_relative',
+                    'msg': (
+                        f'{context}：相対形容詞「{adj}」に比較基準がありません。'
+                        f'「〜と比べて」「従来〜に対して」等の基準を明示してください。'
+                        f'{_RELATIVE_CITE}'
+                    ),
+                })
+
+    # ③ 方向性変化動詞（比較基準または連動表現がなければ警告）
+    if _has_change_verb(sentence):
+        if not (_COMPARISON_BASIS_PAT.search(sentence) or _is_correlation_expr(sentence)):
+            m_stem = _CHANGE_VERB_STEM_PAT.search(sentence)
+            m_wago = _CHANGE_WAGO_PAT.search(sentence)
+            verb = (m_stem or m_wago).group(0)  # type: ignore[union-attr]
+            issues.append({
+                'level': level,
+                'check': 'clarity_relative',
+                'msg': (
+                    f'{context}：変化動詞「{verb}」に比較基準がありません。'
+                    f'「〜と比べて」「従来〜に対して」等の基準を明示してください。'
+                    f'{_RELATIVE_CITE}'
+                ),
+            })
+
+    return issues
+
+
+def check_relative_expression(
+    claims: dict[int, str],
+    kinds: dict[int, str],
+    sections: dict[str, str],
+) -> list[dict[str, Any]]:
+    """相対表現・程度副詞・方向性変化動詞の比較基準欠如を検出する。
+
+    請求項: warning（明確性違反）
+    明細書: info（記載上の問題）
+    """
+    issues: list[dict] = []
+
+    # ── 請求項
+    for num in sorted(claims.keys()):
+        for sent in _split_sentences(claims[num]):
+            for issue in _check_sentence_relative(sent, f'請求項{num}', 'warning'):
+                issue['claim'] = num
+                issues.append(issue)
+
+    # ── 明細書（段落番号付き）
+    desc = sections.get('description', '')
+    if desc:
+        for m in re.finditer(r'【(\d{4})】(.*?)(?=【\d{4}】|\Z)', desc, re.DOTALL):
+            para_id = m.group(1)
+            for sent in _split_sentences(m.group(2)):
+                issues += _check_sentence_relative(sent, f'【{para_id}】', 'info')
+
+    return issues
