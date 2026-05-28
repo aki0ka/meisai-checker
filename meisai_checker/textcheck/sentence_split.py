@@ -23,6 +23,19 @@ _INLINE_ENUM_PAT = re.compile(
 # 全角かっこ・半角かっこ両対応
 _LONG_PAREN_PAT = re.compile(r'[（(]([^）)\n]{40,})[）)]')
 
+# 1-5: 条件節の多重化
+# 〜するとき / 〜した場合 / 〜であれば / 〜ならば 等のマーカーを検出
+# 「このとき」「そのとき」等の指示語連結は除外（直前がこ/そ/ど/あ+の）
+_CONDITIONAL_PAT = re.compile(
+    r'(?:する|した|される|された|の|な|た)とき'   # た: 超えたとき等
+    r'|(?:する|した|される|された|で)あれば'
+    r'|(?:する|した|される|された|な|で)ならば?'
+    r'|(?:する|した|される|された|ある|な)(?:場合|際)に?(?:は|も)?',  # ある: である場合等
+    re.UNICODE,
+)
+_DEICTIC_TOKI_PAT = re.compile(r'[こそどあ]のとき', re.UNICODE)
+_SENTENCE_SPLIT_PAT = re.compile(r'[。．]')
+
 _PARA_ID_PAT = re.compile(r'【(\d{4,5})】')
 _HEADING_PAT = re.compile(r'^【[^】\d][^】]*】\s*$')
 _PARA_NUM_PAT = re.compile(r'【\d{4,5}】')
@@ -97,6 +110,34 @@ def check_sentence_split(sections):
                 "level": "info",
                 "msg": (f"かっこ内が{len(inner)}文字と長くなっています"
                         f"—次の文に切り出すことを検討（1-4）"),
+                "detail": snippet,
+            }
+            if current_para:
+                issue["para_id"] = current_para
+            issues.append(issue)
+
+        # 1-5: 条件節の多重化
+        for sent in _SENTENCE_SPLIT_PAT.split(body):
+            sent = sent.strip()
+            if len(sent) < 20:
+                continue
+            # 指示語連結（このとき・そのとき等）を除去してからカウント
+            sent_stripped = _DEICTIC_TOKI_PAT.sub('', sent)
+            matches = _CONDITIONAL_PAT.findall(sent_stripped)
+            if len(matches) < 2:
+                continue
+            snippet = sent[:60].strip()
+            key = ('1-5', current_para, sent[:20])
+            if key in seen:
+                continue
+            seen.add(key)
+            issue = {
+                "milestone": "TC9",
+                "level": "info",
+                "msg": (
+                    f"条件節が{len(matches)}つ重なっています"
+                    f"—文を分割するか「かつ」「または」で並列化することを検討（1-5）"
+                ),
                 "detail": snippet,
             }
             if current_para:
