@@ -517,8 +517,10 @@ def _found_in_scope_ex(noun, scope_tokens):
     bridge_original が非Noneの場合、スペルアウト括弧書き省略によるブリッジマッチを示す。
 
     例外1: UniDicが「部内」等を複合名詞化するケース → 末尾位置接尾辞を除去して再検索。
-    例外2: 量化子付き照応詞（「各X」等） → 先頭量化子を除去して再検索。
-    例外3: スペルアウトブリッジ（「ＧＮＳＳ受信機」←「ＧＮＳＳ（…）受信機」）。
+    例外2: スペルアウトブリッジ（「ＧＮＳＳ受信機」←「ＧＮＳＳ（…）受信機」）。
+
+    注：量化子の剥ぎ取りは行わない。「前記各N」は「各N」として前方検索する。
+    「複数のN」と導入されたなら「前記複数のN」で照応するのが正しい形。
     """
     defined = _collect_defined_nouns(scope_tokens)
     if noun in defined:
@@ -527,17 +529,10 @@ def _found_in_scope_ex(noun, scope_tokens):
         base = noun[:-1]
         if len(base) >= 2 and base in defined:
             return True, None
-    core = _strip_leading_quantifier(noun)
-    if core != noun and len(core) >= 2 and core in defined:
-        return True, None
     # スペルアウトブリッジフォールバック
     bridge = _spell_out_bridge(noun, scope_tokens)
     if bridge:
         return True, bridge
-    if core != noun:
-        bridge2 = _spell_out_bridge(core, scope_tokens)
-        if bridge2:
-            return True, bridge2
     return False, None
 
 
