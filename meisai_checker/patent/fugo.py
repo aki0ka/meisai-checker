@@ -603,6 +603,30 @@ def _lineno_to_para_id(desc_text, lineno):
     return current
 
 
+def _is_parallel_numbering(fugos: list[str]) -> bool:
+    """１１・２１・３１ 等、末尾桁が共通で先頭桁が異なる系列番号パターンか判定。
+
+    例:
+      ["１１", "２１"]       → True  （一の位が同じ）
+      ["１０", "２０", "３０"] → True
+      ["１１", "１２"]       → False （末尾桁が異なる）
+    """
+    if len(fugos) < 2:
+        return False
+
+    def _unit_suffix(f: str) -> str:
+        hf = z2h(f)
+        i = len(hf)
+        while i > 0 and hf[i - 1].isalpha():
+            i -= 1
+        if i > 0 and hf[i - 1].isdigit():
+            return hf[i - 1] + hf[i:]
+        return ''
+
+    tails = [_unit_suffix(f) for f in fugos]
+    return bool(tails[0]) and len(set(tails)) == 1
+
+
 def check_fugo(claims, sections):
     """符号チェック（図面符号と変数記号）。"""
     issues = []
@@ -652,6 +676,14 @@ def check_fugo(claims, sections):
     # ① 1符号 → 複数要素名（ERROR）
     for fugo, name_map in sorted(fugo_to_names.items()):
         if len(name_map) > 1:
+            # 全名称が同一核名詞の序列修飾グループなら正常
+            # （一方のＸ／他方のＸが同じ符号に対応するのは意図的な型参照）
+            cores = {core_name_map.get(n, n) for n in name_map}
+            if len(cores) == 1:
+                core = next(iter(cores))
+                if (core in ordinal_cores
+                        and all(n in ordinal_cores[core] for n in name_map)):
+                    continue
             names = list(name_map.keys())
             issues.append({
                 "milestone": "M4", "level": "error",
@@ -677,7 +709,7 @@ def check_fugo(claims, sections):
             return h2.startswith(h1) or h1.startswith(h2)
         non_hier = [(f1, f2) for i2, f1 in enumerate(fugos)
                     for f2 in fugos[i2+1:] if not is_hierarchical(f1, f2)]
-        if non_hier:
+        if non_hier and not _is_parallel_numbering(fugos):
             issues.append({
                 "milestone": "M4", "level": "warning",
                 "msg": (f"要素名「{name}」に複数の符号が対応しています：" +
