@@ -34,6 +34,8 @@ _CONDITIONAL_PAT = re.compile(
     re.UNICODE,
 )
 _DEICTIC_TOKI_PAT = re.compile(r'[こそどあ]のとき', re.UNICODE)
+# OR接続詞で並列されている条件節はネストではないので除外
+_OR_CONNECTIVE_PAT = re.compile(r'又は|若しくは|または|もしくは', re.UNICODE)
 _SENTENCE_SPLIT_PAT = re.compile(r'[。．]')
 
 _PARA_ID_PAT = re.compile(r'【(\d{4,5})】')
@@ -125,6 +127,9 @@ def check_sentence_split(sections):
             sent_stripped = _DEICTIC_TOKI_PAT.sub('', sent)
             matches = _CONDITIONAL_PAT.findall(sent_stripped)
             if len(matches) < 2:
+                continue
+            # OR接続詞（又は・または等）で並列した条件節はネストでない
+            if _OR_CONNECTIVE_PAT.search(sent):
                 continue
             snippet = sent[:60].strip()
             key = ('1-5', current_para, sent[:20])

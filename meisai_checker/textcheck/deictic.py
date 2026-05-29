@@ -14,10 +14,12 @@ import re
 
 # 指示代名詞 + 助詞のパターン
 # 連体詞「この/その/あの」は別語であり対象外
+# 「これにより」は特許定型の効果記載なので除外
 _DEICTIC_PAT = re.compile(
     r'(これら?|それら?|あれ|どれ|こちら|そちら|あちら|どちら)'
     r'[はをがにでのもよりとへ]'
 )
+_KORE_NI_YORI_PAT = re.compile(r'これにより')
 
 _PARA_ID_PAT = re.compile(r'【(\d{4,5})】')
 _HEADING_PAT = re.compile(r'^【[^】\d][^】]*】\s*$')
@@ -56,7 +58,9 @@ def check_deictic(sections):
             if len(body) < 4:
                 continue
 
-            for match in _DEICTIC_PAT.finditer(body):
+            # 「これにより」は効果記載の定型句なので除外
+            body_filtered = _KORE_NI_YORI_PAT.sub('', body)
+            for match in _DEICTIC_PAT.finditer(body_filtered):
                 word = match.group(1)
                 snippet = body[max(0, match.start() - 10):match.end() + 20].strip()
                 key = (current_para, word, snippet[:20])
