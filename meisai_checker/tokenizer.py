@@ -349,26 +349,6 @@ def _collect_defined_nouns(tokens):
                        or (len(span) == 1 and _is_formal_noun_tok(span[0])))
             if not is_skip:
                 nouns[s] = nouns.get(s, 0) + 1
-                # 量化修飾+核名詞 → 核名詞を先行詞候補として追加登録
-                # パターンA: LIMITER + 'の' + 核名詞  例:「複数の送信波」→「送信波」
-                # パターンB: 接頭辞(各/毎等) + 核名詞  例:「各送信波」→「送信波」
-                if span and len(span) >= 2:
-                    for k in range(len(span) - 1):
-                        tok_k   = span[k]
-                        tok_k1  = span[k+1]
-                        # パターンA: LIMITER + 'の'
-                        if (tok_k['surf'] in _LIMITERS and tok_k1['surf'] == 'の'
-                                and k + 2 < len(span)):
-                            core = _span_to_str(span[k+2:])
-                            if len(core) >= 2 and core not in _SKIP_EXTRA:
-                                nouns[core] = nouns.get(core, 0) + 1
-                            break
-                        # パターンB: 接頭辞 + 名詞句（各送信波、毎送信等）
-                        if (tok_k['pos'] == '接頭辞' and _is_noun_tok(tok_k1)):
-                            core = _span_to_str(span[k+1:])
-                            if len(core) >= 2 and core not in _SKIP_EXTRA:
-                                nouns[core] = nouns.get(core, 0) + 1
-                            break
                 # パターンC: 末尾トークンが数詞（符号番号）の場合
                 # 「収容部２０」→「収容部」もベース名詞として登録
                 # （「該収容部内」の先行詞「収容部」が見つかるようにするため）
