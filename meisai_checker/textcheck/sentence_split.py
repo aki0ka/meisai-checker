@@ -23,6 +23,10 @@ _INLINE_ENUM_PAT = re.compile(
 # 全角かっこ・半角かっこ両対応
 _LONG_PAREN_PAT = re.compile(r'[（(]([^）)\n]{40,})[）)]')
 
+# 1-4 除外: 英字略称のスペルアウト（ＣＰＵ：Central Processing Unit 等）
+# 「[英字略称][：or :][英語フルネーム先頭]」パターンを含む括弧は容認
+_ACRONYM_SPELLING_PAT = re.compile(r'[Ａ-ＺＡ-ｚA-Za-z]+[：:][A-Za-z]')
+
 # 1-5: 条件節の多重化
 # 〜するとき / 〜した場合 / 〜であれば / 〜ならば 等のマーカーを検出
 # 「このとき」「そのとき」等の指示語連結は除外（直前がこ/そ/ど/あ+の）
@@ -102,6 +106,9 @@ def check_sentence_split(sections):
         # 1-4: 長いかっこ書き
         for match in _LONG_PAREN_PAT.finditer(body):
             inner = match.group(1)
+            # 英字略称のスペルアウト（ＣＰＵ：Central Processing Unit等）は容認
+            if _ACRONYM_SPELLING_PAT.search(inner):
+                continue
             snippet = match.group(0)[:60].strip()
             key = ('1-4', current_para, snippet[:20])
             if key in seen:
