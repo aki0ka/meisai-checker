@@ -131,6 +131,17 @@ def _is_fugo_exclude(name, toks=None):
     if (all(_is_zenkaku_alpha(c) for c in name)
             and any(_is_zenkaku_lower(c) for c in name)):
         return True
+    # 全角数字始まりは数値表現（３０ＧＨｚ以上等）であり要素名ではない
+    if _is_zenkaku_digit(name[0]):
+        return True
+    # 先頭が大小混在の全角英字（単位記号）＋後続文字あり（ＧＨｚ以上/ＭＨｚ以下等）
+    _ai = 0
+    while _ai < len(name) and _is_zenkaku_alpha(name[_ai]):
+        _ai += 1
+    if (_ai >= 2
+            and any(_is_zenkaku_lower(name[k]) for k in range(_ai))
+            and _ai < len(name)):
+        return True
     # 公報番号パターン
     if _is_koho_name(name) or _is_koho_name_part(name):
         return True
