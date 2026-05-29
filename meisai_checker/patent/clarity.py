@@ -212,6 +212,37 @@ _PERMISSIVE_YOKU_PAT = re.compile(
 
 _RELATIVE_CITE = '（特許法36条6項2号）'
 
+# ── 相対表現チェックの対象サブセクション ──────────────────────────────
+# 技術分野・背景技術・図面の簡単な説明・符号の説明は文体チェック対象外
+
+_DESC_HEADING_PAT = re.compile(r'^【[^】\d][^】]*】\s*$')
+
+_TARGET_SECTION_PAT = re.compile(
+    r'【(?:'
+    r'発明が解決しようとする課題'
+    r'|課題を解決するための手段'
+    r'|発明の効果'
+    r'|発明を実施するための(?:最良の)?形態'
+    r'|発明の実施の形態'
+    r'|実施(?:形態)?[０-９0-9]*'
+    r'|実施例[０-９0-9]*'
+    r')】',
+    re.UNICODE,
+)
+
+
+def _extract_target_sections(desc: str) -> str:
+    """description テキストからチェック対象サブセクションのみを抽出する。"""
+    result_lines: list[str] = []
+    in_target = False
+    for line in desc.splitlines():
+        stripped = line.strip()
+        if _DESC_HEADING_PAT.match(stripped):
+            in_target = bool(_TARGET_SECTION_PAT.match(stripped))
+        if in_target:
+            result_lines.append(line)
+    return '\n'.join(result_lines)
+
 
 def _has_change_verb(text: str) -> bool:
     return bool(_CHANGE_VERB_STEM_PAT.search(text) or _CHANGE_WAGO_PAT.search(text))
@@ -303,8 +334,8 @@ def check_relative_expression(
                 issue['claim'] = num
                 issues.append(issue)
 
-    # ── 明細書（段落番号付き）
-    desc = sections.get('description', '')
+    # ── 明細書（対象サブセクションのみ：課題・手段・効果・実施形態・実施例）
+    desc = _extract_target_sections(sections.get('description', ''))
     if desc:
         for m in re.finditer(r'【(\d{4})】(.*?)(?=【\d{4}】|\Z)', desc, re.DOTALL):
             para_id = m.group(1)

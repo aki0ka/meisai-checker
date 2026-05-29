@@ -36,6 +36,8 @@ SECTION_PATTERNS = {
     # 「発明の詳細な説明」「発明を実施するための形態」両方を description に
     "description": r"【発明の詳細な説明】|【発明を実施するための形態】|【発明を実施するための最良の形態】|【発明の実施の形態】|【実施例】",
     "abstract":    r"【要約】|【書類名】[\s　]*要約書",
+    # 符号の説明は文章でないため独立キーに分離（description に混入させない）
+    "fugo_desc":   r"【符号の説明】",
 }
 
 
@@ -67,6 +69,16 @@ def split_sections(text):
             current_lines.append(line)
 
     flush()
+
+    # 要約書はコンテンツ後の空行（選択図・書類名等）でテキストを切る
+    if 'abstract' in sections:
+        trimmed = []
+        for line in sections['abstract'].splitlines():
+            if not line.strip() and trimmed:
+                break
+            trimmed.append(line)
+        sections['abstract'] = '\n'.join(trimmed).strip()
+
     return sections
 
 
