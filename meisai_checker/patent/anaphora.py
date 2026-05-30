@@ -12,6 +12,7 @@ from ..tokenizer import (
     _noun_span,
     _span_to_str,
     _collect_defined_nouns,
+    _scan_first_seen_as_plural,
     _noun_after_zenshou,
     _found_in_scope,
     _found_in_scope_ex,
@@ -125,6 +126,19 @@ def _uniqueness_warning(num, surf, noun, bare_claims):
     }
 
 
+def _plural_intro_warning(num, surf, noun):
+    """早いものがち戦略：群（複数のN）が先行しているのに裸の「前記N」で照応した場合の警告。"""
+    return {
+        'claim': num, 'level': 'warning',
+        'word': surf, 'noun': noun,
+        'msg': (f"請求項{num}：「{noun}」は「複数の{noun}」（群）として先に導入されています。"
+                f"裸の「{surf}{noun}」では群中のどの個体を指すか定まらず唯一性が崩れます。"
+                f"群全体を指すなら「{surf}複数の{noun}」、"
+                f"個体を指すなら「{surf}複数の{noun}のそれぞれ」「{surf}複数の{noun}のうちの少なくとも１つ」、"
+                f"または先行詞側に「第1{noun}」「第2{noun}」等の固有名称を付与することを検討してください。"),
+    }
+
+
 def check_zenshou(claims, dep_map):
     """前記・上記・当該・該の先行詞チェック（fugashiトークンベース）。
 
@@ -144,6 +158,15 @@ def check_zenshou(claims, dep_map):
     claim_body_items = {
         n: (_body_tokens(claim_tokens[n], b), b) for n, b in claims.items()
     }
+
+    # 早いものがち戦略：特許請求の範囲全体を文字列順（請求項番号順）に走査し、
+    # 各核名詞の初出時の量化子状態（複数のN が先か裸 N が先か）を記録する。
+    # noun -> True（複数のN が先行）/ False（裸 N が先行）
+    _scope_tokens_all = []
+    for _n in sorted(claims.keys()):
+        _scope_tokens_all += claim_tokens[_n]
+    first_seen_as_plural = _scan_first_seen_as_plural(_scope_tokens_all)
+    _plural_intro_seen = set()  # (claim_num, noun) — 群先行警告の重複排除
 
     for num in sorted(claims.keys()):
         body = claims[num]
@@ -251,6 +274,11 @@ def check_zenshou(claims, dep_map):
                         if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
                             _uniqueness_seen.add((num, noun))
                             issues.append(_uniqueness_warning(num, t['surf'], noun, bare))
+                        # 早いものがち：群（複数のN）が先行しているのに裸照応
+                        if (first_seen_as_plural.get(noun) is True
+                                and (num, noun) not in _plural_intro_seen):
+                            _plural_intro_seen.add((num, noun))
+                            issues.append(_plural_intro_warning(num, t['surf'], noun))
                     continue
                 if len(direct_parents) <= 1:
                     # 単項従属または独立：全祖先を結合してチェック
@@ -275,6 +303,18 @@ def check_zenshou(claims, dep_map):
                                 if _found_in_scope(noun, prev_scope):
                                     suppressed = True
                                     break
+                # 早いものがち戦略：前記/上記で裸の先行詞が見つからないが、
+                # 「複数のN」（群）として先に導入されている場合は、
+                # 「先行詞なしエラー」ではなく「群先行による唯一性崩れ」警告にする。
+                # （群は登録済みであり、欠けているのは原子としての名称だけ）
+                # 当該・該はこのルールの対象外（局所スコープのため従来エラーを維持）。
+                if (not suppressed and t['surf'] not in _TOUGAI_WORDS
+                        and first_seen_as_plural.get(noun) is True):
+                    if (num, noun) not in _plural_intro_seen:
+                        _plural_intro_seen.add((num, noun))
+                        issues.append(_plural_intro_warning(num, t['surf'], noun))
+                    suppressed = True
+
                 if not suppressed:
                     if t['surf'] not in _TOUGAI_WORDS and len(direct_parents) > 1:
                         # 多項従属の場合、どの親で見つからないかを示す
@@ -333,6 +373,11 @@ def check_zenshou(claims, dep_map):
                 if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
                     _uniqueness_seen.add((num, noun))
                     issues.append(_uniqueness_warning(num, t['surf'], noun, bare))
+                # 早いものがち：群（複数のN）が先行しているのに裸照応
+                if (first_seen_as_plural.get(noun) is True
+                        and (num, noun) not in _plural_intro_seen):
+                    _plural_intro_seen.add((num, noun))
+                    issues.append(_plural_intro_warning(num, t['surf'], noun))
     return issues
 
 

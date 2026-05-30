@@ -465,6 +465,57 @@ def _noun_after_zenshou(tokens, zenshou_idx):
         return noun, span[0]['start'], span[-1]['end']
     return noun, fallback_end, fallback_end
 
+# 「群」として導入する量化子（早いものがち戦略で「複数のN」相当として扱う）
+# 「複数の」のみ対象。「各N」「それぞれのN」等は分配であり、ここでは扱わない。
+_PLURAL_INTRO_MODS = {'複数'}
+
+
+def _scan_first_seen_as_plural(tokens):
+    """トークン列を文字列順に走査し、各核名詞 N の「初出時の量化子状態」を記録する。
+
+    「早いものがち戦略」:
+      - 「複数のN」として先に登場した核名詞 N → True
+      - 裸名詞 N として先に登場した核名詞 N → False
+    一度記録した N は上書きしない（初出のみ）。
+
+    照応詞（前記・上記・当該・該）の直後の名詞句は参照であって導入ではないため
+    スキップする（_collect_defined_nouns と同じ扱い）。
+
+    戻り値: dict[核名詞 str, bool]
+    """
+    result = {}
+    i = 0
+    n = len(tokens)
+    while i < n:
+        t = tokens[i]
+        # 照応詞の直後の名詞句は参照なのでまとめてスキップ
+        if t['surf'] in _ZENSHOU_WORDS:
+            skip_span = _noun_span(tokens, i + 1)
+            i += 1 + (len(skip_span) if skip_span else 0)
+            continue
+        # 「複数 の N」パターン: 群としての導入
+        if (t['surf'] in _PLURAL_INTRO_MODS
+                and i + 2 < n and tokens[i + 1]['surf'] == 'の'
+                and _is_noun_tok(tokens[i + 2])):
+            span = _noun_span(tokens, i + 2)
+            core = _span_to_str(span)
+            if len(core) >= 2 and core not in result:
+                result[core] = True
+            # 「複数の」+核名詞をまとめて消費
+            i = i + 2 + (len(span) if span else 1)
+            continue
+        # 通常の名詞句（裸名詞としての登場）
+        if _is_noun_tok(t):
+            span = _noun_span(tokens, i)
+            s = _span_to_str(span)
+            if len(s) >= 2 and s not in result:
+                result[s] = False
+            i += len(span) if span else 1
+            continue
+        i += 1
+    return result
+
+
 _LEADING_QUANT_PREFIXES = [
     ('各', 1),
     ('複数の', 3),
