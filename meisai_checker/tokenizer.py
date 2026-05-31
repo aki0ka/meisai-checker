@@ -218,10 +218,13 @@ def _skip_quantifier(tokens, i):
 def _noun_span(tokens, start_idx):
     """tokens[start_idx] から始まる名詞句トークン列を返す。
 
-    「の」継続ルール（拡張版）:
-      (1) 直前が 数詞 または 接頭辞         → 序数修飾「第１の〜」
-      (2) 直前が 限定詞(_LIMITERS)         → 「複数の〜」「一方の〜」
-      (3) 上記以外の普通名詞の後の「の」     → 停止（例：検知部の信号）
+    「の」継続ルール（改善版）:
+      (1) 序数修飾のみ：「第１の〜」「2番目の〜」パターン
+          - パターン1a: 接頭辞「第」+ 「の」
+          - パターン1b: 「番目」+ 「の」
+          ※ 「０の空ファイル」等の数値属性修飾は序数修飾ではなく停止
+      (2) 限定詞修飾：「複数の〜」「一方の〜」等（_LIMITERS に登録された語）
+      (3) 上記以外の「の」：停止（例：検知部の信号）
 
     量化修飾「少なくともNつの」は先行詞の核となる名詞句の前に置かれる
     限定詞として扱い、スキップして後続名詞句のみを返す。
@@ -281,8 +284,18 @@ def _noun_span(tokens, start_idx):
             if not span:
                 break
             prev = span[-1]
-            # (1) 序数修飾：直前が数詞または接頭辞
-            if prev['pos1'] == '数詞' or prev['pos'] == '接頭辞':
+            # (1) 序数修飾：以下のパターンのみ
+            #   パターン1a: 「第N」（接頭辞「第」+ 数詞）+ 「の」→ 「第1の〜」
+            #   パターン1b: 「N番目」（数詞 + 「番目」）+ 「の」→ 「1番目の〜」
+            is_ordinal = False
+            # パターン1a: 直前が接頭辞「第」
+            if prev['pos'] == '接頭辞' and prev['surf'] == '第':
+                is_ordinal = True
+            # パターン1b: 直前が「番目」
+            elif prev['surf'] == '番目':
+                is_ordinal = True
+
+            if is_ordinal:
                 span.append(t)
                 i += 1
             # (2) 限定詞：複数の・一方の・他の 等
@@ -356,19 +369,6 @@ def _collect_defined_nouns(tokens):
                     base = _span_to_str(span[:-1])
                     if len(base) >= 2 and base not in _SKIP_EXTRA:
                         nouns[base] = nouns.get(base, 0) + 1
-                # パターンD: 「数詞の名詞」パターン（例：「ファイルサイズが０の空ファイル」）
-                # 「０の空ファイル」として登録された複合名詞から、「の」の後の核名詞「空ファイル」も登録
-                # このパターンは複合限定詞で、「の」の後が本来の先行詞候補
-                # スキャン: span 内で「数詞の名詞」パターンを探す
-                for j in range(len(span) - 2):
-                    if (span[j]['pos1'] == '数詞'
-                            and span[j + 1]['surf'] == 'の'
-                            and _is_noun_tok(span[j + 2])):
-                        # j+2 からのサブスパンを抽出
-                        sub_span = span[j + 2:]
-                        sub_noun = _span_to_str(sub_span)
-                        if len(sub_noun) >= 2 and sub_noun not in _SKIP_EXTRA:
-                            nouns[sub_noun] = nouns.get(sub_noun, 0) + 1
             i += len(span) if span else 1
         else:
             i += 1
