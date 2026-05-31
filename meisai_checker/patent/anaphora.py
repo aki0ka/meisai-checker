@@ -224,6 +224,27 @@ def check_zenshou(claims, dep_map):
                     ),
                 })
 
+            # 「接頭辞としての各＋前記X」パターン検出（例：「各前記端末」）
+            # Russell定冠詞理論では「前記」は単数選択（ι演算子）。その後に「各」で分配をかけるのは矛盾。
+            if (t['surf'] in _ZENSHOU_WORDS and t['surf'] not in _TOUGAI_WORDS
+                    and i >= 1
+                    and tokens[i - 1]['surf'] == '各'
+                    and tokens[i - 1].get('pos') == '接頭辞'):
+                issues.append({
+                    'claim': num, 'level': 'warning',
+                    'word': t['surf'], 'noun': noun,
+                    'msg': (
+                        f"請求項{num}：「各{t['surf']}{noun}」は"
+                        f"唯一の個体を定記述で選んだ後に分配をかける論理矛盾です。"
+                        f"Russell定冠詞理論では、「前記」（the = ι演算子）で単一の個体を選んだ後、"
+                        f"「各」で複数分配をかけるのは不可能です。"
+                        f"意図に応じて次のいずれかに書き換えてください："
+                        f"「前記複数の{noun}のそれぞれ」（複数の群から分配）、"
+                        f"「前記{noun}のそれぞれ」（複数先行詞がある場合）、"
+                        f"または先行詞を「複数の{noun}」として導入してください。"
+                    ),
+                })
+
             zenshou_end = tokens[i]['end']
             verb_modified = noun_start > zenshou_end  # 「前記AしたB」パターン
 
