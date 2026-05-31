@@ -178,12 +178,18 @@ def check_zenshou(claims, dep_map):
         if m_pre:
             preamble_text = body[:m_pre.end()]
             if any(z in preamble_text for z in _ZENSHOU_WORDS):
-                issues.append({
-                    'claim': num, 'level': 'warning',
-                    'msg': (f"請求項{num}：前文（「であって/において」以前）に照応詞があります。"
-                            f"前文はタイプ表現のみにし、要素の導入・参照は本文で行ってください。"
-                            f"前文内の先行詞・照応詞はM3チェック対象外です。"),
-                })
+                # 従属項の冒頭照応詞は許可（従属項では先行項からの照応が常態）
+                # 「請求項1に記載の装置において、前記センサは...」という形式は正当
+                direct_parents = dep_map.get(num, [])
+                is_dependent = len(direct_parents) > 0
+
+                if not is_dependent:
+                    issues.append({
+                        'claim': num, 'level': 'warning',
+                        'msg': (f"請求項{num}：前文（「であって/において」以前）に照応詞があります。"
+                                f"前文はタイプ表現のみにし、要素の導入・参照は本文で行ってください。"
+                                f"前文内の先行詞・照応詞はM3チェック対象外です。"),
+                    })
 
         direct_parents = dep_map.get(num, [])
         ancestors = get_all_ancestors(num, dep_map, _cache)
