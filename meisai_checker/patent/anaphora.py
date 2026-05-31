@@ -311,12 +311,14 @@ def check_zenshou(claims, dep_map):
                     # 単項従属または独立：全祖先を結合してチェック
                     found, _bridge_src = _found_in_scope_ex(noun, ancestor_tokens)
                 else:
-                    # 多項従属：全ての直接親のスコープそれぞれで見つかる必要がある
+                    # 多項従属：いずれか一つの直接親のスコープで見つかれば良い
+                    # 「請求項1又は2に記載の〜」は一方が適用されるので、
+                    # 一方のスコープで見つかれば先行詞として成立する
                     _parent_results = [
                         _found_in_scope_ex(noun, _scope_tokens_for_parent(p, dep_map, claims, _cache))
                         for p in direct_parents
                     ]
-                    found = all(r[0] for r in _parent_results)
+                    found = any(r[0] for r in _parent_results)
                     _bridge_src = next((r[1] for r in _parent_results if r[1]), None)
 
             if not found:
@@ -344,11 +346,9 @@ def check_zenshou(claims, dep_map):
 
                 if not suppressed:
                     if t['surf'] not in _TOUGAI_WORDS and len(direct_parents) > 1:
-                        # 多項従属の場合、どの親で見つからないかを示す
-                        missing = [p for p in direct_parents
-                                   if not _found_in_scope(noun,
-                                       _scope_tokens_for_parent(p, dep_map, claims, _cache))]
-                        detail = f"（請求項{missing}に従属する場合にスコープ外）"
+                        # 多項従属の場合、どの親のスコープでも見つからないことを示す
+                        # （いずれか一つで見つかれば先行詞として成立するため）
+                        detail = f"（請求項{direct_parents}全ての親スコープで見つかりません）"
                     elif t['surf'] not in _TOUGAI_WORDS:
                         dep_chain = sorted(ancestors)
                         detail = (f"（参照先：同一請求項前方＋従属元{dep_chain}）"
