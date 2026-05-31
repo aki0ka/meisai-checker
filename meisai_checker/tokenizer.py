@@ -356,6 +356,19 @@ def _collect_defined_nouns(tokens):
                     base = _span_to_str(span[:-1])
                     if len(base) >= 2 and base not in _SKIP_EXTRA:
                         nouns[base] = nouns.get(base, 0) + 1
+                # パターンD: 「数詞の名詞」パターン（例：「ファイルサイズが０の空ファイル」）
+                # 「０の空ファイル」として登録された複合名詞から、「の」の後の核名詞「空ファイル」も登録
+                # このパターンは複合限定詞で、「の」の後が本来の先行詞候補
+                # スキャン: span 内で「数詞の名詞」パターンを探す
+                for j in range(len(span) - 2):
+                    if (span[j]['pos1'] == '数詞'
+                            and span[j + 1]['surf'] == 'の'
+                            and _is_noun_tok(span[j + 2])):
+                        # j+2 からのサブスパンを抽出
+                        sub_span = span[j + 2:]
+                        sub_noun = _span_to_str(sub_span)
+                        if len(sub_noun) >= 2 and sub_noun not in _SKIP_EXTRA:
+                            nouns[sub_noun] = nouns.get(sub_noun, 0) + 1
             i += len(span) if span else 1
         else:
             i += 1
