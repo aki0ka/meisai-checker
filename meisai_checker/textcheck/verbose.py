@@ -63,55 +63,94 @@ _VERBOSE_PATTERNS = [
 _PARA_ID_PAT = re.compile(r'【(\d{4,5})】')
 _HEADING_PAT = re.compile(r'^【[^】\d][^】]*】\s*$')
 _PARA_NUM_PAT = re.compile(r'【\d{4,5}】')
+_CLAIM_NUM_PAT = re.compile(r'【請求項(\d+)】')
+
+# 請求項で権利範囲に影響しうるパターン → 🟡 warning で個別表示
+_SCOPE_RISK_PATS = frozenset({
+    'することが可能', 'することができる', 'が実現できる',
+})
 
 
 def check_verbose(sections):
     """TC5: 冗長表現チェック。
 
+    請求項:
+      - 「することができる」系 → 🟡 warning（権利範囲に影響しうる）、個別表示
+      - その他 → 🔵 info、個別表示
+    明細書本文:
+      - パターン別に件数を集約して 🔵 info 1件ずつ（逐一列挙しない）
+
     sections: split_sections() の戻り値
     戻り値: issue dict のリスト
     """
     issues = []
-    seen = set()
 
-    targets = [
-        sections.get("description", ""),
-        sections.get("claims", ""),
-    ]
-
-    for text in targets:
-        if not text:
-            continue
-
-        current_para = None
-        for line in text.splitlines():
+    # ── 請求項：個別表示 ──
+    claims_text = sections.get("claims", "")
+    if claims_text:
+        seen: set = set()
+        current_claim = None
+        for line in claims_text.splitlines():
             stripped = line.strip()
-            m = _PARA_ID_PAT.match(stripped)
-            if m:
-                current_para = 'p-' + m.group(1)
-
+            cm = _CLAIM_NUM_PAT.match(stripped)
+            if cm:
+                current_claim = int(cm.group(1))
+                continue
             if _HEADING_PAT.match(stripped):
                 continue
-
             body = _PARA_NUM_PAT.sub('', stripped).strip()
             if len(body) < 4:
                 continue
-
             for pat, note in _VERBOSE_PATTERNS:
                 for match in pat.finditer(body):
-                    snippet = body[max(0, match.start() - 12):match.end() + 12].strip()
-                    key = (note, current_para, match.group(0))
+                    matched = match.group(0)
+                    key = (note, current_claim, matched)
                     if key in seen:
                         continue
                     seen.add(key)
+                    is_scope = any(risk in matched for risk in _SCOPE_RISK_PATS)
+                    snippet = body[max(0, match.start() - 12):match.end() + 12].strip()
                     issue = {
                         "milestone": "TC5",
-                        "level": "info",
-                        "msg": f"冗長な表現があります：「{match.group(0)}」— {note}",
+                        "level": "warning" if is_scope else "info",
+                        "msg": f"冗長な表現があります：「{matched}」— {note}",
                         "detail": snippet,
                     }
-                    if current_para:
-                        issue["para_id"] = current_para
+                    if current_claim:
+                        issue["claim"] = current_claim
                     issues.append(issue)
+
+    # ── 明細書本文：パターン別に件数集約 ──
+    desc_text = sections.get("description", "")
+    if desc_text:
+        counts: dict = {}   # note -> count
+        seen_desc: set = set()
+        current_para = None
+        for line in desc_text.splitlines():
+            stripped = line.strip()
+            pm = _PARA_ID_PAT.match(stripped)
+            if pm:
+                current_para = pm.group(1)
+                continue
+            if _HEADING_PAT.match(stripped):
+                continue
+            body = _PARA_NUM_PAT.sub('', stripped).strip()
+            if len(body) < 4:
+                continue
+            for pat, note in _VERBOSE_PATTERNS:
+                for match in pat.finditer(body):
+                    key = (note, current_para, match.group(0))
+                    if key in seen_desc:
+                        continue
+                    seen_desc.add(key)
+                    counts[note] = counts.get(note, 0) + 1
+
+        for note, count in sorted(counts.items(), key=lambda x: -x[1]):
+            label = note.split('→')[0].strip().strip('「」')
+            issues.append({
+                "milestone": "TC5",
+                "level": "info",
+                "msg": f"冗長な表現「{label}」が明細書本文に{count}件あります（{note}）",
+            })
 
     return issues
