@@ -580,8 +580,15 @@ def check_subcombination(
         parent_body = claims.get(parent_num, '')
         dep_body = claims[num]
 
-        # 従属クレームが「において」「であって」の限定形を持つかチェック
-        if 'において' not in dep_body and 'であって' not in dep_body:
+        # 「において」「であって」が引用句（請求項N に記載の〜）の直後にある
+        # 限定形構造かどうかを確認する。
+        # 「前記Aの方向において、…請求項Nに記載の装置。」のような場所格の
+        # 「において」は対象外（引用句の直後でないため）。
+        _CLAIM_LIMIT_RE = re.compile(
+            r'請求項\d+(?:\s*[又或]\s*は\s*\d+)*\s*に記載の.{0,25}(?:において|であって)',
+            re.UNICODE,
+        )
+        if not _CLAIM_LIMIT_RE.search(dep_body):
             continue
 
         # 親クレームから内部コンビネーション要素を抽出
