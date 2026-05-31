@@ -109,6 +109,14 @@ def extract_verbs_for_support(text):
         if prev and prev['pos'] == '助詞' and prev['surf'] in _NI_PARTICLE:
             continue
         b = t['base'].split('-')[0]  # MeCabがbaseに品詞ラベルを混入する場合の対処
+        surf_form = t['surf']
+        # 同訓異字: 表層形と辞書形の先頭漢字が異なる場合（例: 延びる/伸びる）、
+        # 表層形の漢字で辞書形を再構成する（MeCabの誤正規化を補正）
+        if (surf_form and b and len(b) >= 2
+                and '一' <= surf_form[0] <= '鿿'
+                and '一' <= b[0] <= '鿿'
+                and surf_form[0] != b[0]):
+            b = surf_form[0] + b[1:]
         if len(b) >= 2 and b not in _VERB_STOP:
             verbs.add(b)
     return verbs
