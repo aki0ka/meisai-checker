@@ -569,6 +569,7 @@ def _found_in_scope_ex(noun, scope_tokens):
 
     例外1: UniDicが「部内」等を複合名詞化するケース → 末尾位置接尾辞を除去して再検索。
     例外2: スペルアウトブリッジ（「ＧＮＳＳ受信機」←「ＧＮＳＳ（…）受信機」）。
+    例外3: 限定詞+の+核名詞（「所定の分岐画像」）の場合、限定詞を除外した核名詞でも再検索。
 
     注：量化子の剥ぎ取りは行わない。「前記各N」は「各N」として前方検索する。
     「複数のN」と導入されたなら「前記複数のN」で照応するのが正しい形。
@@ -579,6 +580,12 @@ def _found_in_scope_ex(noun, scope_tokens):
     if noun and noun[-1] in _LOC_SUFFIXES and len(noun) > 2:
         base = noun[:-1]
         if len(base) >= 2 and base in defined:
+            return True, None
+    # 例外3: 限定詞+核名詞で再検索（「分岐画像」→「所定の分岐画像」）
+    # 「所定の分岐画像」で定義されている場合、「前記分岐画像」で照応できるようにする
+    for limiter in sorted(_LIMITERS, key=len, reverse=True):
+        with_limiter = limiter + 'の' + noun
+        if with_limiter in defined:
             return True, None
     # スペルアウトブリッジフォールバック
     bridge = _spell_out_bridge(noun, scope_tokens)
