@@ -356,6 +356,15 @@ def _collect_defined_nouns(tokens):
                     base = _span_to_str(span[:-1])
                     if len(base) >= 2 and base not in _SKIP_EXTRA:
                         nouns[base] = nouns.get(base, 0) + 1
+                # パターンD: 繰り返し接尾辞を含む複合名詞の場合
+                # 「質問用データ」→「質問」もベース名詞として登録
+                # （「前記質問」が別の先行詞として参照される場合に対応）
+                for j, tok in enumerate(span[:-1]):  # 末尾以外を走査
+                    if tok['pos'] == '接尾辞' and tok['surf'] in _ITER_SUFFIXES:
+                        base = _span_to_str(span[:j])
+                        if len(base) >= 2 and base not in _SKIP_EXTRA:
+                            nouns[base] = nouns.get(base, 0) + 1
+                        break
             i += len(span) if span else 1
         else:
             i += 1
