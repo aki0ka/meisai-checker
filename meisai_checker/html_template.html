@@ -1003,6 +1003,19 @@ function buildM23Tab(con, d) {
     topDiv.appendChild(m2IssDiv);
   }
 
+  // M3 issueリスト（唯一性崩壊・複数の前記X・前記AしたB等のテキスト警告）
+  var m3issues = (d.issues.m3 || []).filter(function(i){ return i.msg; });
+  if (m3issues.length) {
+    var m3IssHead = document.createElement('div');
+    m3IssHead.style.cssText = 'padding:4px 10px 2px;font-size:10px;font-family:var(--mono);color:var(--ink3);border-top:1px solid var(--border);margin-top:2px';
+    m3IssHead.textContent = 'M3 前記・当該 チェック結果';
+    topDiv.appendChild(m3IssHead);
+    var m3IssDiv = document.createElement('div');
+    m3IssDiv.innerHTML = buildIssueList(m3issues, 'm3');
+    attachIssueEvents(m3IssDiv, d, 'm3');
+    topDiv.appendChild(m3IssDiv);
+  }
+
   // ── 下部：照応詞リスト ──
   var botDiv = document.createElement('div');
   botDiv.id = 'm23-bot';
