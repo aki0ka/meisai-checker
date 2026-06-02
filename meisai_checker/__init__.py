@@ -14,7 +14,7 @@
 from .preprocessor import DocFormat, NormalizedDoc, normalize, detect_format
 from .analyzer import analyze, build_noun_groups
 
-__version__ = "0.231.0"
+__version__ = "0.233.0"
 __release_date__ = "2026-06-02"
 __all__ = [
     "DocFormat",
