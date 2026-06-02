@@ -253,7 +253,9 @@ def check_ambiguity(claims: dict[int, str]) -> list[dict[str, Any]]:
     for num in sorted(claims.keys()):
         body = claims[num]
         issues += _check_renyou_chain(num, body)
-        issues += _check_or_no(num, body)
+        # _check_or_no() は廃止: 「請求項2または3に記載のX」のような標準的な表現が
+        # 理論的には多義的でも、特許実務では意味が確定しており、警告は不要
+        # （2026-06-02 ユーザー指摘で廃止判定）
         issues += _check_modifier_chain(num, body)
         issues += _check_double_wo(num, body)
         issues += _check_long_no_comma(num, body)
