@@ -107,9 +107,25 @@ _OR_NO_PAT = re.compile(
 )
 
 def _check_or_no(claim_num: int, body: str) -> list[dict]:
-    """「AまたはBのC」パターンを検出する。"""
+    """「AまたはBのC」パターンを検出する。
+
+    ただし、「請求項2または3に記載の～」のような定型句は除外する。
+    """
     issues = []
+
+    # 定型句の除外パターン（特許実務で読み方が確定している表現）
+    _EXCLUDE_PATTERNS = [
+        r'請求項\d+(?:又は|または)\d+に記載',  # 「請求項2または3に記載」
+        r'特許請求の範囲\d+(?:又は|または)\d+',  # 「特許請求の範囲2または3」
+    ]
+
     for m in _OR_NO_PAT.finditer(body):
+        matched_text = m.group(0)
+
+        # 定型句に該当する場合はスキップ
+        if any(re.search(pat, matched_text) for pat in _EXCLUDE_PATTERNS):
+            continue
+
         a, b, c = m.group(1), m.group(2), m.group(3)
         # A・Bが両方名詞的な長さ（1文字だけの助詞等を除外）
         if len(a) < 2 or len(b) < 2 or len(c) < 1:
@@ -253,9 +269,7 @@ def check_ambiguity(claims: dict[int, str]) -> list[dict[str, Any]]:
     for num in sorted(claims.keys()):
         body = claims[num]
         issues += _check_renyou_chain(num, body)
-        # _check_or_no() は廃止: 「請求項2または3に記載のX」のような標準的な表現が
-        # 理論的には多義的でも、特許実務では意味が確定しており、警告は不要
-        # （2026-06-02 ユーザー指摘で廃止判定）
+        issues += _check_or_no(num, body)
         issues += _check_modifier_chain(num, body)
         issues += _check_double_wo(num, body)
         issues += _check_long_no_comma(num, body)
