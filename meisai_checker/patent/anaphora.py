@@ -36,8 +36,9 @@ _ZENSHOU_QUANT_PRE_PAT = re.compile(
     r'(?:前記|上記|当該|該)(?:各|複数の|すべての|全ての|それぞれの|多数の|少数の)?$'
 )
 
-# 請求項前文（"…であって"/"…において" 以前）の終端を検出
-_PREAMBLE_END_PAT = re.compile(r'であって[、,]|において[、,]')
+# 請求項前文（"…であって" 以前）の終端を検出
+# 「もであって」（条件・許容表現）は除外
+_PREAMBLE_END_PAT = re.compile(r'(?<!も)であって[、,]')
 
 # 複合位置語（2文字以上）：「基板直下」→「基板」+「直下」のように名詞境界を侵害するケース
 _LOC_COMPOUND = ['直下', '近傍', '直上', '直前', '直後', '付近', '周辺', '周囲', '近傍部', '周り']
@@ -67,7 +68,7 @@ def _scope_tokens_for_parent(parent, dep_map, claims, cache):
 
 
 def _body_tokens(tokens, body_text):
-    """前文（であって/において以前）を除いた本文トークン列を返す。前文なしは全トークン。"""
+    """前文（であって以前）を除いた本文トークン列を返す。前文なしは全トークン。"""
     m = _PREAMBLE_END_PAT.search(body_text)
     if not m:
         return tokens
@@ -174,7 +175,7 @@ def check_zenshou(claims, dep_map):
 
         # 前文に照応詞がある場合は警告（前文はタイプ表現のみにすべき）
         # 「するステップにおいて」等の従属節は除外（lookbehind で ステップ を除く）
-        m_pre = re.search(r'であって[、,]|(?<!ステップ)において[、,]', body)
+        m_pre = re.search(r'(?<!も)であって[、,]', body)
         if m_pre:
             preamble_text = body[:m_pre.end()]
             if any(z in preamble_text for z in _ZENSHOU_WORDS):
@@ -186,7 +187,7 @@ def check_zenshou(claims, dep_map):
                 if not is_dependent:
                     issues.append({
                         'claim': num, 'level': 'warning',
-                        'msg': (f"請求項{num}：前文（「であって/において」以前）に照応詞があります。"
+                        'msg': (f"請求項{num}：前文（「であって」以前）に照応詞があります。"
                                 f"前文はタイプ表現のみにし、要素の導入・参照は本文で行ってください。"
                                 f"前文内の先行詞・照応詞はM3チェック対象外です。"),
                     })
@@ -207,8 +208,9 @@ def check_zenshou(claims, dep_map):
             if not noun or len(noun) < 2:
                 continue
 
-            # 「量化子＋の＋前記X」パターン検出（例：「複数の前記端末」）
-            # ιで唯一選択した後に複数をかけるのは論理矛盾。「前記複数のX」等に書き換えるべき。
+            # 「弱量化子＋の＋前記X」パターン検出（例：「複数の前記端末」）
+            # 「複数の」は弱量化子：新規実体を導入する。「前記」は定記述：既知実体を参照。
+            # この二つの操作は相容れず、論理的に矛盾。常に誤り。
             if (t['surf'] in _ZENSHOU_WORDS and t['surf'] not in _TOUGAI_WORDS
                     and i >= 2
                     and tokens[i - 1]['surf'] == 'の'
@@ -218,15 +220,13 @@ def check_zenshou(claims, dep_map):
                     'claim': num, 'level': 'warning',
                     'word': t['surf'], 'noun': noun,
                     'msg': (
-                        f"請求項{num}：「{quant}の{t['surf']}{noun}」は"
-                        f"唯一の個体を定記述で選んだ後に量化をかける形です。"
-                        f"先行詞が「{quant}の{noun}」（集合）として導入されている場合は論理矛盾です。"
-                        f"意図に応じて次のいずれかに書き換えてください："
-                        f"「前記{quant}の{noun}」（群全体）、"
-                        f"「前記{quant}の{noun}のそれぞれ」（分配）、"
-                        f"「前記{quant}の{noun}のうちの少なくとも１つ」（部分）。"
-                        f"先行詞が裸名詞タイプとして導入されている場合でも、"
-                        f"先行詞側に「{quant}の{noun}」を明示する書き方が安全です。"
+                        f"請求項{num}：「{quant}の{t['surf']}{noun}」は常に誤りです。"
+                        f"「{quant}の」は新規実体を導入する弱量化子、「前記」は既知実体を参照する定記述です。"
+                        f"この二つを結合することはできません。"
+                        f"次のいずれかに書き換えてください："
+                        f"「前記{quant}の{noun}」（群を導入してから参照）、"
+                        f"「前記{quant}の{noun}のそれぞれ」（分配参照）、"
+                        f"「前記{quant}の{noun}のうちの少なくとも１つ」（部分参照）。"
                     ),
                 })
 

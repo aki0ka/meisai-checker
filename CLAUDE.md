@@ -113,14 +113,26 @@ README.md                ← ユーザー向けドキュメント
 - NEologd 導入では根本解決にならない（辞書語彙でなく形態素境界の問題）
 - `.github/ISSUE_TEMPLATE/false_detection.md` でユーザーフィードバックを収集し、事例が集まってからルール化する方針
 
-### 次の作業候補
+### リファクタリング・実装予定
 
-| 優先度 | 作業 | 規模 |
-|--------|------|------|
-| 中 | Phase 3: preprocessor.py → normalize/ 分割・PCT対応 | 大 |
-| 中 | analyze() 戻り値を Issue dataclass に統一 | 中 |
-| 中 | CLI サブコマンド化（meisai check-text 等） | 中 |
-| 低 | Layer 5: argument.py / predicate.py（GiNZA必要、未導入） | 大 |
+**詳細は** `.claude/projects/-Users-akihisa-projects-meisai-checker/memory/project_refactoring_roadmap.md` **を参照**
+- 優先度別リスト（高・中・低）
+- 各項目の規模・ファイル・テスト戦略・依存関係
+- 実装順序の推奨案（Phase 1-4）
+- 常に最新の進捗を更新
+
+**概要:**
+
+| 優先度 | 作業 | 規模 | 状態 |
+|--------|------|------|------|
+| 高 | M4 誤検出修正バッチ | 小 | 設計完了 |
+| 高 | tokenizer 型分離（指示子/量化子） | 中 | 設計中 |
+| 高 | M3 トークンベース化 | 中 | 設計中 |
+| 高 | M6 動詞チェック追加 | 小 | 未着手 |
+| 中 | analyze() を Issue dataclass 統一 | 中 | 未着手 |
+| 中 | CLI サブコマンド化 | 小 | 未着手 |
+| 中 | Phase 3: preprocessor.py → normalize/ | 大 | 設計未着手 |
+| 低 | Layer 5: argument.py / predicate.py | 大 | 未着手（GiNZA未導入） |
 
 ---
 
