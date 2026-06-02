@@ -40,7 +40,7 @@ from .patent.support import (  # noqa: F401
 )
 from .patent.anaphora import (  # noqa: F401
     get_all_ancestors, check_zenshou, extract_noun_phrase_after,
-    extract_defined_nouns, build_noun_groups,
+    extract_defined_nouns, build_noun_groups, check_pronoun_variants,
 )
 from .patent.fugo import (  # noqa: F401
     check_fugo, check_fugo_setsumeisho, classify_fugo, FUGO_EXCLUDE_LIST,
@@ -151,6 +151,7 @@ def analyze(text, _skip_blocks=False):
     )
     m2_issues = check_dependency(claims, dep_map, kinds) + m2b_issues
     m3_issues = check_zenshou(claims, dep_map)
+    style_issues = check_pronoun_variants(claims)
     m4_issues, element_table, fugo_table, var_table = check_fugo(claims, sections)
     setsu_issues, setsu_table = check_fugo_setsumeisho(fugo_table, text)
     m4_issues = m4_issues + setsu_issues
@@ -214,7 +215,7 @@ def analyze(text, _skip_blocks=False):
     except Exception:
         g1_issues = []
 
-    all_issues = m2_issues + m3_issues + m4_issues + m5_issues + m6_issues + m7_issues + m8_issues + m9_issues + tc_issues + g1_issues
+    all_issues = m2_issues + m3_issues + style_issues + m4_issues + m5_issues + m6_issues + m7_issues + m8_issues + m9_issues + tc_issues + g1_issues
 
     noun_groups = build_noun_groups(claims, dep_map, ref_hits, m3_issues)
 
@@ -245,6 +246,7 @@ def analyze(text, _skip_blocks=False):
             "m2": m2_issues,
             "m2b": m2b_issues,
             "m3": m3_issues,
+            "style": style_issues,
             "m4": m4_issues,
             "m5": m5_issues,
             "m6": m6_issues,

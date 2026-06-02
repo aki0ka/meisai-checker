@@ -580,3 +580,59 @@ def build_noun_groups(claims, dep_map, ref_hits, m3_issues):
     for g in groups.values():
         g['refs'].sort(key=lambda r: r['claim'])
     return sorted(groups.values(), key=lambda g: (g['refs'][0]['claim'] if g['refs'] else 0, g['noun']))
+
+
+# ══════════════════════════════════════════════════════════
+# 表記ゆれ警告：「夫々」「其々」「同士」
+# ══════════════════════════════════════════════════════════
+
+def check_pronoun_variants(claims: dict[int, str]) -> list[dict]:
+    """「夫々」「其々」のような表記ゆれと助詞「の」の省略を警告する。
+
+    問題パターン：
+      1. 「前記端末夫々」（「の」なし）→ 「前記…の夫々」を推奨
+      2. 「同士」（漢字）→ 「どうし」ひらがなを推奨
+    """
+    issues = []
+
+    # パターン1: 「前記/上記/当該/該 + ... + [夫其]々」（「の」なし）
+    futatsu_pat = re.compile(
+        r'(前記|上記|当該|該).+?([夫其]々)(?!の)',
+        re.UNICODE | re.DOTALL
+    )
+
+    # パターン2: 「同士」（漢字）
+    doushi_pat = re.compile(r'同士', re.UNICODE)
+
+    for num in sorted(claims.keys()):
+        body = claims[num]
+
+        # パターン1: 「夫々」「其々」の「の」なないケース
+        for m in futatsu_pat.finditer(body):
+            issues.append({
+                'claim': num,
+                'level': 'info',
+                'check': 'style_pronoun_variants',
+                'msg': (
+                    f'請求項{num}：「{m.group(0)}」の表記について。'
+                    f'「{m.group(2)}」は読みにくいため、ひらがなで「それぞれ」と書くことを推奨します。'
+                    f'また、助詞「の」を挟んで「{m.group(1)}…の{m.group(2)}」と表記してください。'
+                )
+            })
+
+        # パターン2: 「同士」（漢字）
+        for m in doushi_pat.finditer(body):
+            # 「を同士」「で同士」など、前置詞的な用法を確認
+            start = max(0, m.start() - 2)
+            context = body[start:m.end() + 2]
+            issues.append({
+                'claim': num,
+                'level': 'info',
+                'check': 'style_pronoun_variants',
+                'msg': (
+                    f'請求項{num}：「同士」について。'
+                    f'読みやすくするため、ひらがなで「どうし」と表記することを推奨します。'
+                )
+            })
+
+    return issues
