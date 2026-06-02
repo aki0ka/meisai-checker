@@ -240,11 +240,19 @@ def _noun_span(tokens, start_idx):
 
     span = []
     i = start_idx
+    ordinal_started = False  # 「第」で始まる序数修飾フラグ
     while i < n:
         t = tokens[i]
         # 照応詞で停止
         if t['surf'] in _ZENSHOU_WORDS:
             break
+        # 「第」を見つけたら序数修飾モード開始
+        # 「第１円形状」「第２両ユニット」のように、「第」の後ろの全ての名詞を連結する
+        if t['pos'] == '接頭辞' and t['surf'] == '第':
+            span.append(t)
+            ordinal_started = True
+            i += 1
+            continue
         # 非カタカナ形状詞 + 後続名詞 → 複合名詞修飾語として継続（「新規〜」型）
         # 例: 「新規解析結果」「固有名称」など、な を挟まない形状詞+名詞複合語
         if (t['pos'] == '形状詞'
@@ -272,9 +280,15 @@ def _noun_span(tokens, start_idx):
         # 範囲接尾語（以上・以下・未満・超等）は名詞句に含めず停止
         if t['surf'] in _RANGE_SUFFIXES:
             break
+        # 序数修飾中（「第」の後ろ）なら、数詞・名詞を全て連結
+        if ordinal_started and (t['pos'] == '数詞' or _is_noun_tok(t)):
+            span.append(t)
+            i += 1
+            continue
         if _is_noun_tok(t):
             span.append(t)
             i += 1
+            ordinal_started = False  # 最初の名詞で序数修飾モード終了
         elif (t['pos'] == '形状詞' and t['surf']
               and all('゠' <= c <= 'ヿ' for c in t['surf'])):
             # カタカナ形状詞（アクティブ・パッシブ等）は複合語修飾語として継続
@@ -297,12 +311,14 @@ def _noun_span(tokens, start_idx):
 
             if is_ordinal:
                 span.append(t)
+                ordinal_started = False  # 「の」で序数修飾モード終了
                 i += 1
             # (2) 限定詞：複数の・一方の・他の 等
             elif prev['surf'] in _LIMITERS:
                 span.append(t)
                 i += 1
             else:
+                ordinal_started = False  # 「の」以外で序数修飾モード終了
                 break
         elif t['pos'] == '記号' and t['surf'] in ('・', '／'):
             span.append(t)
