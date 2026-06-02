@@ -185,16 +185,27 @@ def _find_combo_pos(toks: list[dict]) -> int:
     活用形（備えた・含んだ等）も検出するため surf ではなく base フィールドでマッチする。
     「からなる」は「から」の位置を返す。見つからない場合は -1。
     """
+    positions = _find_all_combo_positions(toks)
+    return positions[0] if positions else -1
+
+
+def _find_all_combo_positions(toks: list[dict]) -> list[int]:
+    """すべてのコンビネーション動詞「を有する/備える/含む」の「を」位置を返す。
+
+    複数の「を備え」に対応。例：
+      「AとBを備え、CとDを備え」→ [最初の「を」の位置, 次の「を」の位置]
+    """
+    positions: list[int] = []
     n = len(toks)
     for i in range(n - 1):
         if toks[i]['surf'] == 'を':
             # base フィールドでコンビネーション動詞を確認（活用形に対応）
             next_base = toks[i + 1].get('base', toks[i + 1]['surf'])
             if next_base in _COMBO_VERB_BASES:
-                return i
+                positions.append(i)
         if toks[i]['surf'] == 'から' and toks[i + 1]['surf'] in ('なる', 'なっ', 'なり'):
-            return i
-    return -1
+            positions.append(i)
+    return positions
 
 
 
@@ -210,6 +221,7 @@ def extract_combination_elements(parent_text: str) -> list[str]:
       「[A]および[B]を備える」
       「[A]ならびに[B]を含む」
 
+    複数の「を備え/有し/含む」に対応（例：「AとBを備え、CとDを備え」）
     外部構成（「外部装置と通信する」等）は除外する。
 
     Returns:
@@ -218,76 +230,77 @@ def extract_combination_elements(parent_text: str) -> list[str]:
     toks = _tokenize(parent_text)
     n = len(toks)
 
-    # コンビネーション動詞の「を」の位置
-    combo_pos = _find_combo_pos(toks)
-    if combo_pos < 0:
+    # すべてのコンビネーション動詞位置を取得
+    combo_positions = _find_all_combo_positions(toks)
+    if not combo_positions:
         return []
 
-    # 走査範囲: 先頭から「を有する/備える/…」の直前まで
-    # （ユーザー定義: を有する/備える でつながれた全要素は内部構成）
-    preamble_end = combo_pos
-
-    # 前提部のトークン列を走査して内部構成要素を収集
+    # 各セグメント（各「を備え」の前まで）で要素を抽出
     elements: list[str] = []
-    seg_start = 0  # 現在のセグメント開始位置
+    seg_start = 0
 
-    i = 0
-    while i < preamble_end:
-        t = toks[i]
+    for combo_pos in combo_positions:
+        preamble_end = combo_pos
+        i = seg_start
 
-        # ── 「および」「ならびに」「並びに」→ 内部構成の接続詞（確実） ──
-        if t['surf'] in ('および', 'ならびに', '並びに'):
-            seg_toks = toks[seg_start:i]
-            head = _get_segment_head_noun(seg_toks)
-            if head and len(head) >= 2:
-                elements.append(head)
-            seg_start = i + 1
+        while i < preamble_end:
+            t = toks[i]
 
-        # ── 「と」（助詞）→ 内部/外部を判定 ──
-        elif t['surf'] == 'と' and t['pos'] == '助詞':
-
-            # 外部構成の「と」はスキップ
-            if _is_external_connector(toks, i):
-                # 外部接続子のためセグメントをリセット
+            # ── 「および」「ならびに」「並びに」→ 内部構成の接続詞（確実） ──
+            if t['surf'] in ('および', 'ならびに', '並びに'):
+                seg_toks = toks[seg_start:i]
+                head = _get_segment_head_noun(seg_toks)
+                if head and len(head) >= 2:
+                    elements.append(head)
                 seg_start = i + 1
-                while seg_start < preamble_end and toks[seg_start]['surf'] in ('、', ','):
-                    seg_start += 1
-                i = seg_start
-                continue
 
-            # 「と」の直後（読点スキップ後）を確認
-            j = i + 1
-            while j < preamble_end and toks[j]['surf'] in ('、', ',', '，'):
-                j += 1
+            # ── 「と」（助詞）→ 内部/外部を判定 ──
+            elif t['surf'] == 'と' and t['pos'] == '助詞':
 
-            if j < preamble_end:
-                next_t = toks[j]
-
-                # 直後が名詞 → 内部構成の列挙「と」
-                if _is_noun_tok(next_t) and not _is_formal_noun_tok(next_t):
-                    seg_toks = toks[seg_start:i]
-                    head = _get_segment_head_noun(seg_toks)
-                    if head and len(head) >= 2:
-                        elements.append(head)
-                    seg_start = j  # 読点をスキップした次の名詞から開始
-                    i = j
+                # 外部構成の「と」はスキップ
+                if _is_external_connector(toks, i):
+                    seg_start = i + 1
+                    while seg_start < preamble_end and toks[seg_start]['surf'] in ('、', ','):
+                        seg_start += 1
+                    i = seg_start
                     continue
 
-                # 直後が「を」→「とを有する」パターン（最後の要素の区切り）
-                elif next_t['surf'] == 'を':
-                    seg_toks = toks[seg_start:i]
-                    head = _get_segment_head_noun(seg_toks)
-                    if head and len(head) >= 2:
-                        elements.append(head)
-                    seg_start = i + 1
+                # 「と」の直後（読点スキップ後）を確認
+                j = i + 1
+                while j < preamble_end and toks[j]['surf'] in ('、', ',', '，'):
+                    j += 1
 
-        i += 1
+                if j < preamble_end:
+                    next_t = toks[j]
 
-    # 最後のセグメント（combo_pos の直前まで）
-    last_seg = toks[seg_start:preamble_end]
-    last_head = _get_segment_head_noun(last_seg)
-    if last_head and len(last_head) >= 2 and last_head not in elements:
-        elements.append(last_head)
+                    # 直後が名詞 → 内部構成の列挙「と」
+                    if _is_noun_tok(next_t) and not _is_formal_noun_tok(next_t):
+                        seg_toks = toks[seg_start:i]
+                        head = _get_segment_head_noun(seg_toks)
+                        if head and len(head) >= 2:
+                            elements.append(head)
+                        seg_start = j
+                        i = j
+                        continue
+
+                    # 直後が「を」→「とを有する」パターン（最後の要素の区切り）
+                    elif next_t['surf'] == 'を':
+                        seg_toks = toks[seg_start:i]
+                        head = _get_segment_head_noun(seg_toks)
+                        if head and len(head) >= 2:
+                            elements.append(head)
+                        seg_start = i + 1
+
+            i += 1
+
+        # 最後のセグメント（combo_pos の直前まで）
+        last_seg = toks[seg_start:preamble_end]
+        last_head = _get_segment_head_noun(last_seg)
+        if last_head and len(last_head) >= 2:
+            elements.append(last_head)
+
+        # 次のセグメント開始位置を設定（「を動詞」の直後）
+        seg_start = combo_pos + 2  # 「を」と動詞をスキップ
 
     # 重複除去（順序保持）
     seen: set[str] = set()
