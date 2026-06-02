@@ -20,6 +20,7 @@ from ..tokenizer import (
     _ZENSHOU_WORDS,
     _TOUGAI_WORDS,
     _QUANT_MODS,
+    _LOC_SUFFIXES,
 )
 
 # 従属項引用句パターン（独立導入ではなく依存参照）
@@ -42,6 +43,28 @@ _PREAMBLE_CANDIDATE_PAT = re.compile(r'(?<!も)(?<!ステップ)(?:であって|
 
 # 複合位置語（2文字以上）：「基板直下」→「基板」+「直下」のように名詞境界を侵害するケース
 _LOC_COMPOUND = ['直下', '近傍', '直上', '直前', '直後', '付近', '周辺', '周囲', '近傍部', '周り']
+
+
+def _strip_loc_suffix(noun: str) -> str:
+    """位置接尾辞を除去した基底名詞を返す。
+
+    例: 「土台側」→「土台」、「範囲内」→「範囲」、「走査線上」→「走査線」
+    複合位置語の場合も処理：「基板直下」→「基板」
+    """
+    if not noun:
+        return noun
+
+    # 複合位置語（2文字以上）を優先チェック
+    for loc_compound in _LOC_COMPOUND:
+        if noun.endswith(loc_compound):
+            return noun[:-len(loc_compound)]
+
+    # 単純な位置接尾辞（1文字）をチェック
+    for loc_suffix in _LOC_SUFFIXES:
+        if noun.endswith(loc_suffix):
+            return noun[:-len(loc_suffix)]
+
+    return noun
 
 
 def get_all_ancestors(num, dep_map, _cache=None):
@@ -231,6 +254,13 @@ def check_zenshou(claims, dep_map):
             noun, noun_start, _noun_end = _noun_after_zenshou(tokens, i)
             if not noun or len(noun) < 2:
                 continue
+
+            # 位置接尾辞を除去した基底名詞を取得
+            # 例: 「土台側」→「土台」、「範囲内」→「範囲」、「走査線上」→「走査線」
+            noun_base = _strip_loc_suffix(noun)
+            if noun_base != noun:
+                # 位置接尾辞が除去された場合、基底名詞で先行詞照合を行う
+                noun = noun_base
 
             # 「弱量化子＋の＋前記X」パターン検出（例：「複数の前記端末」）
             # 「複数の」は弱量化子：新規実体を導入する。「前記」は定記述：既知実体を参照。
@@ -504,16 +534,15 @@ def build_noun_groups(claims, dep_map, ref_hits, m3_issues):
 
     # 初出請求項を特定
     def _find_first_in(noun, target_nums):
-        from ..tokenizer import _LOC_SUFFIXES
         candidates = [noun]
         # 位置接尾辞フォールバック:
         # 「収容部内」→「収容部」も候補に追加
-        # UniDicが「部内」を複合名詞として一体化した場合、定義語は「収容部」であり
-        # 請求項本文に「収容部内」という語句は現れないため完全一致検索が失敗する
-        if noun and noun[-1] in _LOC_SUFFIXES and len(noun) > 2:
-            base = noun[:-1]
-            if len(base) >= 2:
-                candidates.append(base)
+        # 「土台側」→「土台」も候補に追加
+        # UniDicが複合語を一体化した場合、定義語は基底名詞であり
+        # 請求項本文に接尾辞付き版が現れた場合、完全一致検索が失敗するため
+        base = _strip_loc_suffix(noun)
+        if base != noun and len(base) >= 2:
+            candidates.append(base)
         for num in target_nums:
             body = claims.get(num)
             if body is None:
