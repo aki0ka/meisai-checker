@@ -36,9 +36,9 @@ _ZENSHOU_QUANT_PRE_PAT = re.compile(
     r'(?:前記|上記|当該|該)(?:各|複数の|すべての|全ての|それぞれの|多数の|少数の)?$'
 )
 
-# 請求項前文（"…であって" 以前）の終端を検出
-# 「もであって」（条件・許容表現）は除外
-_PREAMBLE_END_PAT = re.compile(r'(?<!も)であって[、,]')
+# 請求項前文の候補パターン（"…であって"/"…において" の後）
+# 実装では末尾名詞との繰り返しを確認して判定
+_PREAMBLE_CANDIDATE_PAT = re.compile(r'(?<!も)(?<!ステップ)(?:であって|において)[、,]')
 
 # 複合位置語（2文字以上）：「基板直下」→「基板」+「直下」のように名詞境界を侵害するケース
 _LOC_COMPOUND = ['直下', '近傍', '直上', '直前', '直後', '付近', '周辺', '周囲', '近傍部', '周り']
@@ -67,13 +67,22 @@ def _scope_tokens_for_parent(parent, dep_map, claims, cache):
     return toks
 
 
+def _extract_final_noun(tokens):
+    """請求項末尾の発明種類名詞を抽出。例：「装置」「システム」「方法」など。"""
+    if not tokens:
+        return None
+    # 末尾から逆順に最初の名詞を探す（助詞や句読点を除外）
+    for i in range(len(tokens) - 1, -1, -1):
+        t = tokens[i]
+        if t['pos1'] == '名詞' and len(t['surf']) >= 2:
+            return t['surf']
+    return None
+
+
 def _body_tokens(tokens, body_text):
-    """前文（であって以前）を除いた本文トークン列を返す。前文なしは全トークン。"""
-    m = _PREAMBLE_END_PAT.search(body_text)
-    if not m:
-        return tokens
-    end_pos = m.end()
-    return [t for t in tokens if t['start'] >= end_pos]
+    """本文トークン列を返す（前文判定済みの場合は除外）。"""
+    # 注：前文判定は check_zenshou 内で末尾名詞照合を含めて行う
+    return tokens
 
 
 def _bare_claims_tokenized(noun, scope_body_items):
@@ -173,10 +182,25 @@ def check_zenshou(claims, dep_map):
         body = claims[num]
         tokens = claim_tokens[num]
 
+        # プリアンブル判定：末尾名詞が繰り返される「であって」「において」のみを判定
+        final_noun = _extract_final_noun(tokens)
+
+        # 候補パターンを検出
+        m_pre = re.search(_PREAMBLE_CANDIDATE_PAT, body)
+        is_preamble = False
+
+        if m_pre and final_noun:
+            # 「であって」「において」の直後で末尾名詞が繰り返されるかチェック
+            # 末尾付近（末尾200文字以内）でのチェック
+            preamble_text = body[:m_pre.end()]
+            tail_text = body[-200:]  # 末尾200文字
+
+            # 末尾200文字内で final_noun が出現するかチェック
+            if final_noun in tail_text and final_noun in body[m_pre.end():]:
+                is_preamble = True
+
         # 前文に照応詞がある場合は警告（前文はタイプ表現のみにすべき）
-        # 「するステップにおいて」等の従属節は除外（lookbehind で ステップ を除く）
-        m_pre = re.search(r'(?<!も)であって[、,]', body)
-        if m_pre:
+        if is_preamble:
             preamble_text = body[:m_pre.end()]
             if any(z in preamble_text for z in _ZENSHOU_WORDS):
                 # 従属項の冒頭照応詞は許可（従属項では先行項からの照応が常態）
@@ -187,7 +211,7 @@ def check_zenshou(claims, dep_map):
                 if not is_dependent:
                     issues.append({
                         'claim': num, 'level': 'warning',
-                        'msg': (f"請求項{num}：前文（「であって」以前）に照応詞があります。"
+                        'msg': (f"請求項{num}：前文（「であって/において」以前）に照応詞があります。"
                                 f"前文はタイプ表現のみにし、要素の導入・参照は本文で行ってください。"
                                 f"前文内の先行詞・照応詞はM3チェック対象外です。"),
                     })
