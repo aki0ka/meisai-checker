@@ -487,6 +487,17 @@ def _noun_after_zenshou(tokens, zenshou_idx):
             if len(y) >= 2:
                 return y, span_y[0]['start'], span_y[-1]['end']
 
+    # 副詞修飾パターン（「あらかじめ定められた閾値」「事前に設定された値」型）
+    elif t1['pos'] == '副詞':
+        k = j + 1
+        while k < n and tokens[k]['pos'] in ('動詞', '助動詞'):
+            k += 1
+        if k < n and _is_noun_tok(tokens[k]) and not _is_fugo_tok(tokens[k]):
+            span_y = _noun_span(tokens, k)
+            y = _span_to_str(span_y)
+            if len(y) >= 2:
+                return y, span_y[0]['start'], span_y[-1]['end']
+
     # 通常パターン
     span = _noun_span(tokens, zenshou_idx + 1)
     noun = _span_to_str(span)
@@ -607,9 +618,13 @@ def _found_in_scope_ex(noun, scope_tokens):
     if noun in defined:
         return True, None
     if noun and noun[-1] in _LOC_SUFFIXES and len(noun) > 2:
-        base = noun[:-1]
-        if len(base) >= 2 and base in defined:
-            return True, None
+        toks_n = _tokenize(noun + 'に')
+        if (len(toks_n) >= 2
+                and toks_n[-2]['surf'] == noun[-1]
+                and toks_n[-1]['surf'] == 'に'):
+            base = noun[:-1]
+            if len(base) >= 2 and base in defined:
+                return True, None
     # 例外3: 限定詞+核名詞で再検索（「分岐画像」→「所定の分岐画像」）
     # 「所定の分岐画像」で定義されている場合、「前記分岐画像」で照応できるようにする
     for limiter in sorted(_LIMITERS, key=len, reverse=True):

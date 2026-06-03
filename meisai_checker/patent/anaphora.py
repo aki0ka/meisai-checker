@@ -50,6 +50,7 @@ def _strip_loc_suffix(noun: str) -> str:
 
     例: 「土台側」→「土台」、「範囲内」→「範囲」、「走査線上」→「走査線」
     複合位置語の場合も処理：「基板直下」→「基板」
+    MeCabが接尾辞品詞として認識した場合のみ除去する（区間・期間等を誤除去しない）。
     """
     if not noun:
         return noun
@@ -59,10 +60,18 @@ def _strip_loc_suffix(noun: str) -> str:
         if noun.endswith(loc_compound):
             return noun[:-len(loc_compound)]
 
-    # 単純な位置接尾辞（1文字）をチェック
+    # 単純な位置接尾辞（1文字）: 助詞「に」を後置した分離位置確認
+    # 「noun + に」をトークナイズし、「に」直前が loc_suffix の単独1文字トークンであれば除去。
+    # 「区間」「期間」等は「区間に」→[区間(名詞),に]で区間が2文字トークンになるため除去しない。
+    # 「土台側」は「土台側に」→[土台,側(1文字),に]で側が単独トークンになるため除去する。
     for loc_suffix in _LOC_SUFFIXES:
         if noun.endswith(loc_suffix):
-            return noun[:-len(loc_suffix)]
+            toks = _tokenize(noun + 'に')
+            if (len(toks) >= 2
+                    and toks[-2]['surf'] == loc_suffix
+                    and toks[-1]['surf'] == 'に'):
+                return noun[:-len(loc_suffix)]
+            break  # 末尾文字は一致したが単独トークンでない → 除去しない
 
     return noun
 
