@@ -93,6 +93,7 @@ _FORMAL_NOUNS = {
 _ADVERB_REAL_NOUNS = {
     '結果', '効果', '程度', '様子', '点',
     '分',  # 「所定期間分」等の助数詞的実質名詞
+    '他',  # 「他のX」→ フル表現を先行詞として登録するため実質名詞扱い
 }
 
 def _is_formal_noun_tok(t):
@@ -143,7 +144,7 @@ _QUANT_MODS = {
 }
 
 # ケースB: 序列修飾語（異なる符号を区別して指す）
-_ORDINAL_MODS = {'一方', '他方'}
+_ORDINAL_MODS = {'一方', '他方', '他', '別'}
 
 def _strip_quant_prefix(name_toks):
     """名詞トークン列の先頭から量化/序列修飾語を除去し核名詞列と種別を返す。
@@ -627,7 +628,10 @@ def _found_in_scope_ex(noun, scope_tokens):
                 return True, None
     # 例外3: 限定詞+核名詞で再検索（「分岐画像」→「所定の分岐画像」）
     # 「所定の分岐画像」で定義されている場合、「前記分岐画像」で照応できるようにする
+    # ただし同一性変更限定詞（他・別）は除外：「他のX」≠「X」なので「前記X」では照応不可
     for limiter in sorted(_LIMITERS, key=len, reverse=True):
+        if limiter in _ORDINAL_MODS:
+            continue
         with_limiter = limiter + 'の' + noun
         if with_limiter in defined:
             return True, None
