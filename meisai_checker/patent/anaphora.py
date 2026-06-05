@@ -12,6 +12,7 @@ from ..tokenizer import (
     _noun_span,
     _span_to_str,
     _collect_defined_nouns,
+    _find_dearu_defs,
     _scan_first_seen_as_plural,
     _noun_after_zenshou,
     _found_in_scope,
@@ -213,6 +214,18 @@ def check_zenshou(claims, dep_map):
     for num in sorted(claims.keys()):
         body = claims[num]
         tokens = claim_tokens[num]
+
+        # 「X である Y」定義構文を検出してINFO発行
+        for genus_str, named_str, _ in _find_dearu_defs(tokens):
+            issues.append({
+                'claim': num, 'level': 'info',
+                'word': named_str, 'noun': named_str,
+                'msg': (
+                    f"請求項{num}：「{genus_str}である{named_str}」を定義構文として処理しました。"
+                    f"「{genus_str}」は型指定（属）として先行詞から除外し、"
+                    f"「{named_str}」を先行詞として登録します。"
+                ),
+            })
 
         # プリアンブル判定：末尾名詞が繰り返される「であって」「において」のみを判定
         final_noun = _extract_final_noun(tokens)

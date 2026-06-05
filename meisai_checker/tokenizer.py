@@ -340,8 +340,71 @@ def _noun_span(tokens, start_idx):
 def _span_to_str(span):
     return ''.join(t['surf'] for t in span)
 
+def _find_dearu_defs(tokens):
+    """「X である Y」定義構文を検出し、(genus_str, named_str, genus_start_idx) リストを返す。
+
+    genus-differentia 定義パターン：
+      X（属）= 型指定。独立した談話参照子ではなく、先行詞から除外する。
+      Y（被定義名）= 命名先行詞として登録すべきもの。
+
+    検出条件：
+      noun_span(X) + で(助動詞) + ある(動詞, 非自立可能) + noun_span(Y・非形式名詞)
+
+    自動除外（MeCab の品詞付与により）：
+      「であるとき/こと」→ で が 接続詞 になるため不一致
+      「であって」→ surf が 'ある' でないため不一致
+    """
+    defs = []
+    n = len(tokens)
+    i = 0
+    while i < n:
+        t = tokens[i]
+        if t['surf'] in _ZENSHOU_WORDS:
+            skip_span = _noun_span(tokens, i + 1)
+            i += 1 + (len(skip_span) if skip_span else 0)
+            continue
+        _is_kata_keijo = (t['pos'] == '形状詞' and t['surf']
+                          and all('゠' <= c <= 'ヿ' for c in t['surf']))
+        _is_keijo_noun_prefix = (
+            t['pos'] == '形状詞' and t['surf']
+            and not all('゠' <= c <= 'ヿ' for c in t['surf'])
+            and i + 1 < n and _is_noun_tok(tokens[i + 1])
+        )
+        if _is_noun_tok(t) or _is_kata_keijo or _is_keijo_noun_prefix:
+            span = _noun_span(tokens, i)
+            if not span:
+                i += 1
+                continue
+            j = i + len(span)
+            # Look-ahead: で(助動詞) + ある(動詞, 非自立可能)
+            if (j + 1 < n
+                    and tokens[j]['surf'] == 'で'
+                    and tokens[j]['pos'] == '助動詞'
+                    and tokens[j + 1]['surf'] == 'ある'
+                    and tokens[j + 1]['pos'] == '動詞'
+                    and tokens[j + 1].get('pos1') == '非自立可能'):
+                k = j + 2
+                if (k < n
+                        and _is_noun_tok(tokens[k])
+                        and not _is_formal_noun_tok(tokens[k])):
+                    named_span = _noun_span(tokens, k)
+                    if named_span:
+                        genus_str = _span_to_str(span)
+                        named_str = _span_to_str(named_span)
+                        if len(genus_str) >= 2 and len(named_str) >= 2:
+                            defs.append((genus_str, named_str, i))
+            i += len(span)
+        else:
+            i += 1
+    return defs
+
+
 def _collect_defined_nouns(tokens):
     """トークン列から定義済み名詞句を収集（名詞句→登録回数）。"""
+    # 「X である Y」定義構文の属（X）は型指定であり談話参照子ではないため除外
+    dearu_defs = _find_dearu_defs(tokens)
+    dearu_genus_starts = {start for _, _, start in dearu_defs}
+
     nouns = {}
     i = 0
     n = len(tokens)
@@ -368,6 +431,11 @@ def _collect_defined_nouns(tokens):
             and i + 1 < n and _is_noun_tok(tokens[i + 1])
         )
         if _is_noun_tok(t) or _is_kata_keijo or _is_keijo_noun_prefix:
+            # 「X である Y」の属（X）は先行詞から除外
+            if i in dearu_genus_starts:
+                span = _noun_span(tokens, i)
+                i += len(span) if span else 1
+                continue
             span = _noun_span(tokens, i)
             s = _span_to_str(span)
             # 除外条件:
