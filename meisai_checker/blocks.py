@@ -10,6 +10,7 @@ GUI・CLI・MCP サーバーから共通利用される表示層ロジック。
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections import defaultdict
 
 from .patent.anaphora import extract_noun_phrase_after
@@ -136,6 +137,11 @@ def _highlight_claim(text, claim_num, m3_error_nouns, fugo_errors, element_table
         # 初出名詞句ハイライト（前記なしで出現 → 黄色枠）
         for fn in sorted(first_nouns, key=len, reverse=True):
             if text[i:i+len(fn)] == fn:
+                # 後続文字が複合語の続き（漢字・カタカナ）なら部分一致 → スキップ
+                # ひらがな（助詞・活用語尾）は語境界として除外する
+                next_ch = text[i+len(fn):i+len(fn)+1]
+                if next_ch and unicodedata.category(next_ch) == 'Lo' and not (0x3041 <= ord(next_ch) <= 0x309F):
+                    continue
                 prefix = text[max(0,i-2):i]
                 prev1  = text[max(0,i-1):i]
                 if prefix not in ('前記','上記','当該') and prev1 != '該':
