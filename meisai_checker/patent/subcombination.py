@@ -246,8 +246,8 @@ def extract_combination_elements(parent_text: str) -> list[str]:
         while i < preamble_end:
             t = toks[i]
 
-            # ── 「および」「及び」「ならびに」「並びに」→ 内部構成の接続詞（確実） ──
-            if t['surf'] in ('および', '及び', 'ならびに', '並びに'):
+            # ── 「および」「及び」「ならびに」「並びに」「又は」「または」「若しくは」「もしくは」→ 内部構成の接続詞（確実） ──
+            if t['surf'] in ('および', '及び', 'ならびに', '並びに', '又は', 'または', '若しくは', 'もしくは'):
                 seg_toks = toks[seg_start:i]
                 head = _get_segment_head_noun(seg_toks)
                 if head and len(head) >= 2:
