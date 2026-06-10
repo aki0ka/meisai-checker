@@ -274,7 +274,7 @@ def check_zenshou(claims, dep_map):
                 continue
 
             noun, noun_start, _noun_end = _noun_after_zenshou(tokens, i)
-            if not noun or len(noun) < 2:
+            if not noun:
                 continue
 
             # 位置接尾辞を除去した基底名詞を取得
@@ -530,7 +530,7 @@ def build_noun_groups(claims, dep_map, ref_hits, m3_issues):
     groups = {}  # noun → group dict
     for hit in ref_hits:
         noun = hit['noun']
-        if len(noun) < 2:
+        if not noun:
             continue
         if noun not in groups:
             groups[noun] = {

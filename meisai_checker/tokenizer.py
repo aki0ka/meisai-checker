@@ -441,8 +441,8 @@ def _collect_defined_nouns(tokens):
             # 除外条件:
             #   1) 1トークンで形式名詞 → 品詞ルールで除外
             #   2) _SKIP_EXTRA（特徴・内容・種類）
-            #   3) 2文字未満
-            is_skip = (len(s) < 2
+            # ※単字名詞（鏡・光・差等）は前記に続く要素名として有効なため除外しない
+            is_skip = (not s
                        or s in _SKIP_EXTRA
                        or (len(span) == 1 and _is_formal_noun_tok(span[0])))
             if not is_skip:
