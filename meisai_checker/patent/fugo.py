@@ -502,12 +502,12 @@ def _extract_elements_tokens(text):
 
                 if j < n and _is_fugo_tok(tokens[j]):
                     noun_toks_raw = tokens[i:j]
-                    # 逆スキャン: 1文字名（接尾辞または普通名詞）かつ直前に動詞が隣接する場合、
-                    # 動詞連用形も要素名に取り込む（例: 書込部→書+込+部）
-                    # ただし接頭辞（第）は序数修飾の一部なので対象外
+                    # 逆スキャン: 1文字接尾辞かつ直前に動詞が隣接する場合、
+                    # 動詞連用形も要素名に取り込む（例: 切り刃→切り+刃）
+                    # 接尾辞限定：普通名詞（蓋・歯等）は連体節末尾の動詞を取り込まない
                     if (len(noun_toks_raw) == 1
                             and len(noun_toks_raw[0]['surf']) == 1
-                            and noun_toks_raw[0]['pos'] != '接頭辞'
+                            and noun_toks_raw[0]['pos'] == '接尾辞'
                             and i > 0):
                         _back = i - 1
                         verb_prefix = []
