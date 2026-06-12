@@ -1239,6 +1239,20 @@ function showM4Para(iss, d) {
 // ══════════════════════════════════════════
 // 符号表タブ
 // ══════════════════════════════════════════
+function makeFugoSetsumeisho(ft) {
+  var items = ft.map(function(row) {
+    var h = row.fugo.replace(/[０-９]/g, function(c){
+      return String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 48);
+    });
+    var num = parseInt(h.replace(/\D/g, ''), 10);
+    var name = row.names.join('・');
+    var suffix = row.is_dup ? '　〔要確認〕' : '';
+    return { num: isNaN(num) ? 99999 : num, line: row.fugo + '…' + name + suffix };
+  });
+  items.sort(function(a, b){ return a.num - b.num; });
+  return items.map(function(i){ return i.line; }).join('\n');
+}
+
 function buildFugoTab(con, d) {
   var ft = d.fugo_table || [];
   var m4issues = d.issues.m4 || [];
@@ -1331,6 +1345,44 @@ function buildFugoTab(con, d) {
   insertResizer(con, topDiv);
   con.appendChild(botDiv);
   if (vt.length > 0) con.appendChild(varDiv);
+
+  // 符号の説明生成セクション
+  if (ft.length > 0) {
+    var genDiv = document.createElement('div');
+    genDiv.style.cssText = 'flex:0 0 auto;border-top:2px solid var(--border)';
+    genDiv.innerHTML =
+      '<div style="display:flex;align-items:center;gap:8px;padding:5px 10px;' +
+        'background:var(--surface);border-bottom:1px solid var(--border)">' +
+        '<span style="font-size:10px;font-family:var(--mono);color:var(--ink3)">符号の説明を生成</span>' +
+        '<button class="fugo-gen-btn" style="font-size:10px;padding:2px 8px;cursor:pointer;' +
+          'background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--ink)">生成</button>' +
+      '</div>' +
+      '<div class="fugo-gen-area" style="display:none;padding:6px 10px">' +
+        '<textarea class="fugo-gen-ta" style="width:100%;box-sizing:border-box;height:140px;' +
+          'font-family:var(--mono);font-size:11px;background:var(--surface);color:var(--ink);' +
+          'border:1px solid var(--border);border-radius:3px;padding:6px;resize:vertical;display:block"></textarea>' +
+        '<button class="fugo-copy-btn" style="margin-top:4px;font-size:10px;padding:2px 10px;cursor:pointer;' +
+          'background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--ink)">コピー</button>' +
+      '</div>';
+    genDiv.querySelector('.fugo-gen-btn').addEventListener('click', function() {
+      var text = makeFugoSetsumeisho(ft);
+      var area = genDiv.querySelector('.fugo-gen-area');
+      var ta = genDiv.querySelector('.fugo-gen-ta');
+      ta.value = text;
+      area.style.display = 'block';
+      ta.select();
+    });
+    genDiv.querySelector('.fugo-copy-btn').addEventListener('click', function() {
+      var ta = genDiv.querySelector('.fugo-gen-ta');
+      ta.select();
+      document.execCommand('copy');
+      var btn = genDiv.querySelector('.fugo-copy-btn');
+      var orig = btn.textContent;
+      btn.textContent = 'コピー済み';
+      setTimeout(function(){ btn.textContent = orig; }, 1500);
+    });
+    con.appendChild(genDiv);
+  }
 
   // 符号の説明照合テーブル
   var st = d.setsu_table || {};
