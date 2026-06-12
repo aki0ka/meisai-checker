@@ -1239,7 +1239,7 @@ function showM4Para(iss, d) {
 // ══════════════════════════════════════════
 // 符号表タブ
 // ══════════════════════════════════════════
-function makeFugoSetsumeisho(ft) {
+function makeFugoSetsumeisho(ft, sortMode) {
   var items = ft.map(function(row) {
     var h = row.fugo.replace(/[０-９]/g, function(c){
       return String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 48);
@@ -1247,9 +1247,13 @@ function makeFugoSetsumeisho(ft) {
     var num = parseInt(h.replace(/\D/g, ''), 10);
     var name = row.names.join('・');
     var suffix = row.is_dup ? '　〔要確認〕' : '';
-    return { num: isNaN(num) ? 99999 : num, line: row.fugo + '…' + name + suffix };
+    return { fugo: row.fugo, num: isNaN(num) ? 99999 : num, line: row.fugo + '…' + name + suffix };
   });
-  items.sort(function(a, b){ return a.num - b.num; });
+  if (sortMode === 'str') {
+    items.sort(function(a, b){ return a.fugo.localeCompare(b.fugo); });
+  } else {
+    items.sort(function(a, b){ return a.num - b.num; });
+  }
   return items.map(function(i){ return i.line; }).join('\n');
 }
 
@@ -1354,6 +1358,11 @@ function buildFugoTab(con, d) {
       '<div style="display:flex;align-items:center;gap:8px;padding:5px 10px;' +
         'background:var(--surface);border-bottom:1px solid var(--border)">' +
         '<span style="font-size:10px;font-family:var(--mono);color:var(--ink3)">符号の説明を生成</span>' +
+        '<select class="fugo-sort-sel" style="font-size:10px;padding:1px 4px;cursor:pointer;' +
+          'background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--ink)">' +
+          '<option value="num">数字順</option>' +
+          '<option value="str">文字列順</option>' +
+        '</select>' +
         '<button class="fugo-gen-btn" style="font-size:10px;padding:2px 8px;cursor:pointer;' +
           'background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--ink)">生成</button>' +
       '</div>' +
@@ -1364,13 +1373,19 @@ function buildFugoTab(con, d) {
         '<button class="fugo-copy-btn" style="margin-top:4px;font-size:10px;padding:2px 10px;cursor:pointer;' +
           'background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--ink)">コピー</button>' +
       '</div>';
-    genDiv.querySelector('.fugo-gen-btn').addEventListener('click', function() {
-      var text = makeFugoSetsumeisho(ft);
+    function doGenerate() {
+      var sortMode = genDiv.querySelector('.fugo-sort-sel').value;
+      var text = makeFugoSetsumeisho(ft, sortMode);
       var area = genDiv.querySelector('.fugo-gen-area');
       var ta = genDiv.querySelector('.fugo-gen-ta');
       ta.value = text;
       area.style.display = 'block';
       ta.select();
+    }
+    genDiv.querySelector('.fugo-gen-btn').addEventListener('click', doGenerate);
+    genDiv.querySelector('.fugo-sort-sel').addEventListener('change', function() {
+      var area = genDiv.querySelector('.fugo-gen-area');
+      if (area.style.display !== 'none') doGenerate();
     });
     genDiv.querySelector('.fugo-copy-btn').addEventListener('click', function() {
       var ta = genDiv.querySelector('.fugo-gen-ta');
