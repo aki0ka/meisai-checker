@@ -112,16 +112,12 @@ def _extract_final_noun(tokens):
     return None
 
 
-def _body_tokens(tokens, body_text):
-    """本文トークン列を返す（前文判定済みの場合は除外）。"""
-    # 注：前文判定は check_zenshou 内で末尾名詞照合を含めて行う
-    return tokens
-
-
 def _bare_claims_tokenized(noun, scope_body_items):
-    """nounが本文（前文除外）に照応詞なしで出現する請求項番号のセットを返す。
+    """nounが照応詞なしで出現する請求項番号のセットを返す。
 
-    scope_body_items: dict[claim_num, (body_tokens, body_text)]
+    scope_body_items: dict[claim_num, (tokens, claim_text)]
+    前文（プリアンブル）も検索対象に含める。プリアンブルに先行詞を書いて
+    本文で照応するパターン（「Xであって、前記X…」）が適法なため。
     - _collect_defined_nouns が照応詞直後をスキップするため、照応詞付き出現は除外される。
     - noun が1回でも「請求項Nに記載の〜」形式で出現する請求項は「継承」とみなし除外。
       （末尾の発明種類表現「ことを特徴とするX」等で再出現しても独立定義として扱わない）
@@ -199,7 +195,7 @@ def check_zenshou(claims, dep_map):
     claim_tokens = {n: _tokenize(b) for n, b in claims.items()}
     # 本文トークン列（前文除外）と本文テキストのペアを構築（唯一性チェック用）
     claim_body_items = {
-        n: (_body_tokens(claim_tokens[n], b), b) for n, b in claims.items()
+        n: (claim_tokens[n], b) for n, b in claims.items()
     }
 
     # 早いものがち戦略：特許請求の範囲全体を文字列順（請求項番号順）に走査し、
@@ -372,8 +368,10 @@ def check_zenshou(claims, dep_map):
                                 if len(p_bare) > 1:
                                     bare |= p_bare
                         else:
-                            scope_body_toks = {a: claim_body_items[a] for a in ancestors | {num} if a in claim_body_items}
-                            bare = _bare_claims_tokenized(noun, scope_body_toks)
+                            anc_body_toks = {a: claim_body_items[a] for a in ancestors if a in claim_body_items}
+                            bare = _bare_claims_tokenized(noun, anc_body_toks)
+                            if _collect_defined_nouns(tokens[:i]).get(noun, 0) > 0:
+                                bare.add(num)
                         if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
                             _uniqueness_seen.add((num, noun))
                             issues.append(_uniqueness_warning(num, t['surf'], noun, bare))
@@ -471,8 +469,10 @@ def check_zenshou(claims, dep_map):
                                 f"括弧書きを省いた「{_PAREN_PAT.sub('', _bridge_src)}」で"
                                 f"先に導入することを推奨します。"),
                     })
-                scope_body_toks = {a: claim_body_items[a] for a in ancestors | {num} if a in claim_body_items}
-                bare = _bare_claims_tokenized(noun, scope_body_toks)
+                anc_body_toks = {a: claim_body_items[a] for a in ancestors if a in claim_body_items}
+                bare = _bare_claims_tokenized(noun, anc_body_toks)
+                if _collect_defined_nouns(tokens[:i]).get(noun, 0) > 0:
+                    bare.add(num)
                 if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
                     _uniqueness_seen.add((num, noun))
                     issues.append(_uniqueness_warning(num, t['surf'], noun, bare))
