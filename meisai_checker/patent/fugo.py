@@ -147,6 +147,9 @@ def _is_fugo_exclude(name, toks=None):
     # 公報番号パターン
     if _is_koho_name(name) or _is_koho_name_part(name):
         return True
+    # 先行技術文献の引用パターン（「米国特許第」「欧州特許第」「同第」等）
+    if name.endswith('特許第') or name.endswith('実用新案第') or name == '同第':
+        return True
     # 先頭トークンがリストに含まれる場合（「ステップＳ」→先頭「ステップ」等）
     if toks and toks[0]['surf'] in FUGO_EXCLUDE_LIST:
         return True

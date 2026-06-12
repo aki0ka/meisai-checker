@@ -264,6 +264,7 @@ def _check_sentence_relative(
     sentence: str,
     context: str,
     level: str,
+    cite: str = _RELATIVE_CITE,
 ) -> list[dict[str, Any]]:
     issues: list[dict] = []
 
@@ -276,7 +277,7 @@ def _check_sentence_relative(
                 'msg': (
                     f'{context}：程度副詞「{adv}」は技術的根拠になりません。'
                     f'具体的な数値または条件で記載してください。'
-                    f'{_RELATIVE_CITE}'
+                    f'{cite}'
                 ),
             })
 
@@ -292,7 +293,7 @@ def _check_sentence_relative(
                     'msg': (
                         f'{context}：相対形容詞「{adj}」に比較基準がありません。'
                         f'「〜と比べて」「従来〜に対して」等の基準を明示してください。'
-                        f'{_RELATIVE_CITE}'
+                        f'{cite}'
                     ),
                 })
 
@@ -308,7 +309,7 @@ def _check_sentence_relative(
                 'msg': (
                     f'{context}：変化動詞「{verb}」に比較基準がありません。'
                     f'「〜と比べて」「従来〜に対して」等の基準を明示してください。'
-                    f'{_RELATIVE_CITE}'
+                    f'{cite}'
                 ),
             })
 
@@ -335,11 +336,12 @@ def check_relative_expression(
                 issues.append(issue)
 
     # ── 明細書（対象サブセクションのみ：課題・手段・効果・実施形態・実施例）
+    # 明細書本文は法令根拠なし（36条6項2号は請求項の明確性規定）
     desc = _extract_target_sections(sections.get('description', ''))
     if desc:
         for m in re.finditer(r'【(\d{4})】(.*?)(?=【\d{4}】|\Z)', desc, re.DOTALL):
             para_id = m.group(1)
             for sent in _split_sentences(m.group(2)):
-                issues += _check_sentence_relative(sent, f'【{para_id}】', 'info')
+                issues += _check_sentence_relative(sent, f'【{para_id}】', 'info', cite='')
 
     return issues
