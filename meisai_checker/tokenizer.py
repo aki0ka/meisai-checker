@@ -179,13 +179,16 @@ def _strip_quant_prefix(name_toks):
     return name_toks, None
 
 def _skip_quantifier(tokens, i):
-    """「少なくとも N つの」「２つの」などの量化修飾シーケンスをスキップし、
+    """「少なくとも N つの」などの量化修飾シーケンスをスキップし、
     後続の名詞句開始インデックスを返す。スキップできなければ i をそのまま返す。
 
     認識するパターン:
       (A) 形容詞「少なく」＋助詞「とも」＋ 数詞 ＋ 接尾辞(名詞的) ＋「の」
       (B) 副詞「少なくとも」（1トークン）＋ 数詞? ＋ 接尾辞(名詞的)? ＋「の」
-      (C) 数詞 ＋ 接尾辞(名詞的) ＋「の」  例：２つの、１個の
+
+    ※ 「Nつの」「N個の」等の単独数量表現（パターンC）はここで除去せず
+      _noun_span 内の「の」継続ルール(3)で名詞句の一部として取り込む。
+      これにより「１つの方向」「２個のセンサ」が先行詞として一体登録される。
     """
     n = len(tokens)
     j = i
@@ -201,15 +204,7 @@ def _skip_quantifier(tokens, i):
         j += 1
 
     if j == i:
-        # (C) 数詞 ＋ 接尾辞(名詞的) ＋「の」  例: ２つの、１個の、三本の
-        # （「少なくとも」を伴わない単独の数量表現）
-        if j < n and tokens[j]['pos1'] == '数詞':
-            k = j + 1
-            if k < n and tokens[k]['pos'] == '接尾辞' and tokens[k]['pos1'] == '名詞的':
-                k += 1
-            if k < n and _is_no_tok(tokens[k]):
-                return k + 1
-        return i  # A/B/Cどのパターンにも一致しなかった
+        return i  # A/Bどのパターンにも一致しなかった
 
     # 数詞（任意）
     if j < n and tokens[j]['pos1'] == '数詞':
@@ -324,6 +319,13 @@ def _noun_span(tokens, start_idx):
                 i += 1
             # (2) 限定詞：複数の・一方の・他の 等
             elif prev['surf'] in _LIMITERS:
+                span.append(t)
+                i += 1
+            # (3) 助数詞接尾辞（つ・個・本等）先行の「の」→ 数量修飾として継続
+            # 例: 「１つの方向」「２個のセンサ」「三本のコイル」
+            # 先行詞を「方向」ではなく「１つの方向」として一体登録するため
+            elif (prev['pos'] == '接尾辞' and prev['pos1'] == '名詞的'
+                  and len(span) >= 2 and span[-2]['pos1'] == '数詞'):
                 span.append(t)
                 i += 1
             else:
@@ -726,6 +728,22 @@ def _found_in_scope_ex(noun, scope_tokens):
             continue
         with_limiter = limiter + 'の' + noun
         if with_limiter in defined:
+            return True, None
+    # 例外4: 数量修飾「Nつの」「N個の」等+核名詞で導入された場合の核名詞単独照応
+    # 「１つのセンサ」で導入 → 「前記センサ」で照応するパターンを許容
+    # （「少なくとも」を伴う場合は既存の先行詞が核名詞で登録されるため対象外）
+    for dn in defined:
+        if not dn.endswith('の' + noun):
+            continue
+        prefix = dn[:-(len(noun) + 1)]  # 「の」+ noun を除いた前置部（「１つ」等）
+        if not prefix:
+            continue
+        prefix_toks = _tokenize(prefix)
+        if ((len(prefix_toks) == 1 and prefix_toks[0]['pos1'] == '数詞')
+                or (len(prefix_toks) == 2
+                    and prefix_toks[0]['pos1'] == '数詞'
+                    and prefix_toks[1]['pos'] == '接尾辞'
+                    and prefix_toks[1]['pos1'] == '名詞的')):
             return True, None
     # スペルアウトブリッジフォールバック
     bridge = _spell_out_bridge(noun, scope_tokens)
