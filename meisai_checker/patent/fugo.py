@@ -265,6 +265,11 @@ def _collect_fugo_suffix(tokens, start_idx):
 
     # サフィックス（全角英字1〜2文字、ハイフンなし）
     elif j < n and _is_alpha_fugo_tok(tokens[j]):
+        # 2文字の単位略称（ｍｍ・ｃｍ・ｋｍ・ｋｇ等）は数値表現として符号ではない
+        _UNIT_2CHAR = frozenset({'ｍｍ', 'ｃｍ', 'ｋｍ', 'ｋｇ', 'ｍｇ',
+                                  'ｍｓ', 'ｎｍ', 'ｄＢ', 'Ｈｚ'})
+        if tokens[j]['surf'] in _UNIT_2CHAR:
+            return [], j
         next_tok = tokens[j + 1] if j + 1 < n else None
         next_surf = next_tok['surf'] if next_tok else ''
         # 「以外」「以上」「以下」「など」等の後置語は次の要素名ではないのでサフィックスを収集する
@@ -686,8 +691,11 @@ def check_fugo(claims, sections):
             cores = {core_name_map.get(n, n) for n in name_map}
             if len(cores) == 1:
                 core = next(iter(cores))
+                # 序列修飾グループ（他方の／一方の等）＋無修飾の素の名前（coreそのもの）が
+                # 同じ符号を共有するのは意図的な型参照なので正常
                 if (core in ordinal_cores
-                        and all(n in ordinal_cores[core] for n in name_map)):
+                        and all(n in ordinal_cores[core] or n == core
+                                for n in name_map)):
                     continue
             names = list(name_map.keys())
             issues.append({

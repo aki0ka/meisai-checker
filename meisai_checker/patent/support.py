@@ -122,6 +122,28 @@ def extract_verbs_for_support(text):
     return verbs
 
 
+def _extract_verb_bases(text):
+    """テキスト中の動詞基本形集合を返す（活用形を辞書形に正規化）。
+    missing_verbs 判定で「囲む」と書かれた本文中の「囲まれる」等の
+    活用形・受動形を見落とさないよう、本文側も基本形で集合化して照合する。
+    """
+    toks = _tokenize(text)
+    bases = set()
+    for t in toks:
+        if t['pos'] != '動詞' or t['pos1'] != '一般':
+            continue
+        b = t['base'].split('-')[0]
+        surf_form = t['surf']
+        if (surf_form and b and len(b) >= 2
+                and '一' <= surf_form[0] <= '鿿'
+                and '一' <= b[0] <= '鿿'
+                and surf_form[0] != b[0]):
+            b = surf_form[0] + b[1:]
+        if len(b) >= 2:
+            bases.add(b)
+    return bases
+
+
 def extract_nouns_for_support(text):
     """サポート要件チェック用の名詞抽出。品詞ベースフィルタで不適切語句を除去。"""
     # 照応詞・「請求項N」を除去してから名詞句を収集
@@ -205,6 +227,8 @@ def check_support(claims, sections):
         })
         return issues, []
 
+    impl_verb_bases = _extract_verb_bases(impl_text)
+
     support_table = []
     noun_to_claims = {}
 
@@ -231,7 +255,7 @@ def check_support(claims, sections):
         missing_nouns = sorted([n for n in nouns
                                  if len(n) >= 2 and n not in impl_text])
         verbs = extract_verbs_for_support(body)
-        missing_verbs = sorted([v for v in verbs if v not in impl_text])
+        missing_verbs = sorted([v for v in verbs if v not in impl_verb_bases])
 
         if missing_nouns or missing_verbs:
             lines = [f"請求項{num}：以下の語句・動詞が発明を実施するための形態に見当たりません。"]
