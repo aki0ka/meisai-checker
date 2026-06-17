@@ -161,7 +161,7 @@ def _uniqueness_warning(num, surf, noun, bare_claims):
         'word': surf, 'noun': noun,
         'msg': (f"請求項{num}：「{surf}{noun}」の先行詞が"
                 f"複数の請求項（{sorted(bare_claims)}）に存在します（唯一性の崩壊）。"
-                f"各{noun}に固有の名称（例：「第1{noun}」「第2{noun}」、または「他の{noun}」「別の{noun}」）を付与することを検討してください。"),
+                f"各{noun}に固有の名称を付与することを検討してください。"),
     }
 
 
@@ -174,7 +174,7 @@ def _plural_intro_warning(num, surf, noun):
                 f"裸の「{surf}{noun}」では群中のどの個体を指すか定まらず唯一性が崩れます。"
                 f"群全体を指すなら「{surf}複数の{noun}」、"
                 f"個体を指すなら「{surf}複数の{noun}のそれぞれ」「{surf}複数の{noun}のうちの少なくとも１つ」、"
-                f"または先行詞側に「第1{noun}」「第2{noun}」「他の{noun}」「別の{noun}」等の固有名称を付与することを検討してください。"),
+                f"または先行詞側に固有名称を付与することを検討してください。"),
     }
 
 
