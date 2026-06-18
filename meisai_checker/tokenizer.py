@@ -409,6 +409,46 @@ def _find_dearu_defs(tokens):
     return defs
 
 
+def _get_title_noun_start(tokens):
+    """請求項末尾の発明宣言名（タイトル名詞句）の開始トークンインデックスを返す。
+
+    パターンA: [動詞] → [NP] → 。
+    パターンB: [動詞] → 、 → [NP] → 。
+    発見できない場合は None を返す。
+    """
+    if not tokens:
+        return None
+    n = len(tokens)
+
+    # 末尾の句点をスキップ
+    end = n - 1
+    while end >= 0 and tokens[end]['surf'] in ('。', '　', ' '):
+        end -= 1
+    if end < 0:
+        return None
+
+    # 末尾から逆向きに名詞・「の」を収集して NP の先頭インデックスを求める
+    pos = end
+    while pos >= 0 and (_is_noun_tok(tokens[pos]) or _is_no_tok(tokens[pos])):
+        pos -= 1
+    noun_start = pos + 1
+
+    if noun_start > end or noun_start == 0:
+        return None
+
+    # NP の先頭が「の」なら除去（助詞「の」で始まる NP は無効）
+    while noun_start <= end and _is_no_tok(tokens[noun_start]):
+        noun_start += 1
+    if noun_start > end:
+        return None
+
+    # NP 直前のトークンがパターンA（動詞）またはパターンB（読点）なら発明宣言名と判定
+    prev = tokens[noun_start - 1]
+    if prev['surf'] == '、' or prev['pos'] == '動詞':
+        return noun_start
+    return None
+
+
 def _collect_defined_nouns(tokens):
     """トークン列から定義済み名詞句を収集（名詞句→登録回数）。"""
     # 「X である Y」定義構文の属（X）は型指定であり談話参照子ではないため除外

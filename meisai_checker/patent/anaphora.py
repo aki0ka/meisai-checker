@@ -17,6 +17,7 @@ from ..tokenizer import (
     _noun_after_zenshou,
     _found_in_scope,
     _found_in_scope_ex,
+    _get_title_noun_start,
     _PAREN_PAT,
     _ZENSHOU_WORDS,
     _TOUGAI_WORDS,
@@ -124,7 +125,10 @@ def _bare_claims_tokenized(noun, scope_body_items):
     """
     found_in = set()
     for claim_num, (body_toks, body_text) in scope_body_items.items():
-        defined = _collect_defined_nouns(body_toks)
+        # 発明宣言名（クレーム末尾のタイトル名詞句）は DR 登録対象外
+        title_start = _get_title_noun_start(body_toks)
+        check_toks = body_toks[:title_start] if title_start is not None else body_toks
+        defined = _collect_defined_nouns(check_toks)
         if defined.get(noun, 0) == 0:
             continue
         # noun が請求項引用で導入されている請求項は継承とみなして除外
