@@ -23,6 +23,7 @@ from ..tokenizer import (
     _TOUGAI_WORDS,
     _QUANT_MODS,
     _LOC_SUFFIXES,
+    _LEADING_QUANT_PREFIXES,
 )
 
 # 従属項引用句パターン（独立導入ではなく依存参照）
@@ -336,6 +337,13 @@ def check_zenshou(claims, dep_map):
             if t['surf'] in _TOUGAI_WORDS:
                 # 当該・該：同一請求項の前方のみ
                 found = _found_in_scope(noun, prefix)
+                if not found:
+                    # ② 束縛変数回収: 「各N」「複数のN」等の分配スコープ内で
+                    # 「当該N」が量化変数を受け取るパターンは正常（出力なし）
+                    for _qpfx, _ in _LEADING_QUANT_PREFIXES:
+                        if _found_in_scope(_qpfx + noun, prefix):
+                            found = True
+                            break
             else:
                 # 前記・上記
                 # まず同一請求項の前方で見つかれば常にOK
@@ -421,6 +429,51 @@ def check_zenshou(claims, dep_map):
                         _plural_intro_seen.add((num, noun))
                         issues.append(_plural_intro_warning(num, t['surf'], noun))
                     suppressed = True
+
+                if not suppressed and t['surf'] in _TOUGAI_WORDS:
+                    # ⑤ 先行詞が親請求項に存在 → WARN（前記推奨）
+                    if _found_in_scope(noun, ancestor_tokens):
+                        issues.append({
+                            'claim': num, 'level': 'warning',
+                            'word': t['surf'], 'noun': noun,
+                            'msg': (
+                                f"請求項{num}：「{t['surf']}{noun}」の先行詞は"
+                                f"同一請求項内ではなく親請求項に存在します。"
+                                f"「当該」のスコープは同一請求項内のみです。"
+                                f"「前記{noun}」への変更を検討してください。"
+                            ),
+                        })
+                        suppressed = True
+                    else:
+                        # ③④ 主要部一致（型の弱化）チェック
+                        _prefix_def = _collect_defined_nouns(prefix)
+                        _head_matches = [
+                            k for k in _prefix_def
+                            if k != noun and k.endswith(noun) and len(k) > len(noun)
+                        ]
+                        if len(_head_matches) == 1:
+                            issues.append({
+                                'claim': num, 'level': 'warning',
+                                'word': t['surf'], 'noun': noun,
+                                'msg': (
+                                    f"請求項{num}：「{t['surf']}{noun}」は型の弱化による参照です"
+                                    f"（先行詞候補：「{_head_matches[0]}」）。"
+                                    f"競合する別要素が増えると参照が曖昧になります。"
+                                    f"「{t['surf']}{_head_matches[0]}」と完全形で記載することを推奨します。"
+                                ),
+                            })
+                            suppressed = True
+                        elif len(_head_matches) > 1:
+                            issues.append({
+                                'claim': num, 'level': 'error',
+                                'word': t['surf'], 'noun': noun,
+                                'msg': (
+                                    f"請求項{num}：「{t['surf']}{noun}」の主要部に一致する先行詞が"
+                                    f"複数あります（候補：{'・'.join(_head_matches)}）。"
+                                    f"どの要素を指すか確定できません。完全形で記載してください。"
+                                ),
+                            })
+                            suppressed = True
 
                 if not suppressed:
                     if t['surf'] not in _TOUGAI_WORDS and len(direct_parents) > 1:
