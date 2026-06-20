@@ -130,7 +130,7 @@ def _bare_claims_tokenized(noun, scope_body_items):
         title_start = _get_title_noun_start(body_toks)
         check_toks = body_toks[:title_start] if title_start is not None else body_toks
         defined = _collect_defined_nouns(check_toks)
-        if defined.get(noun, 0) == 0:
+        if noun not in defined:
             continue
         # noun が請求項引用で導入されている請求項は継承とみなして除外
         is_inherited = False
@@ -382,7 +382,7 @@ def check_zenshou(claims, dep_map):
                         else:
                             anc_body_toks = {a: claim_body_items[a] for a in ancestors if a in claim_body_items}
                             bare = _bare_claims_tokenized(noun, anc_body_toks)
-                            if _collect_defined_nouns(tokens[:i]).get(noun, 0) > 0:
+                            if noun in _collect_defined_nouns(tokens[:i]):
                                 bare.add(num)
                         if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
                             _uniqueness_seen.add((num, noun))
@@ -528,7 +528,7 @@ def check_zenshou(claims, dep_map):
                     })
                 anc_body_toks = {a: claim_body_items[a] for a in ancestors if a in claim_body_items}
                 bare = _bare_claims_tokenized(noun, anc_body_toks)
-                if _collect_defined_nouns(tokens[:i]).get(noun, 0) > 0:
+                if noun in _collect_defined_nouns(tokens[:i]):
                     bare.add(num)
                 if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
                     _uniqueness_seen.add((num, noun))
@@ -552,7 +552,7 @@ def extract_noun_phrase_after(text, pos):
 
 
 def extract_defined_nouns(text):
-    """テキスト中の名詞句を収集して {名詞句: 登録回数} を返す。"""
+    """テキスト中の名詞句を収集して {名詞句: list[Occurrence]} を返す。"""
     tokens = _tokenize(text)
     return _collect_defined_nouns(tokens)
 

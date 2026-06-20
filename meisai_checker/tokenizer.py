@@ -6,6 +6,7 @@
 """
 import os
 import re
+from dataclasses import dataclass, field
 import fugashi
 import unidic_lite
 
@@ -449,50 +450,54 @@ def _get_title_noun_start(tokens):
     return None
 
 
-def _collect_defined_nouns(tokens):
-    """トークン列から定義済み名詞句を収集（名詞句→登録回数）。"""
+@dataclass
+class Occurrence:
+    """先行詞候補の出現記録。
+
+    position: トークン列内のインデックス（span 先頭）
+    modifier: 直前の修飾節テキスト — Phase 2 で埋める
+    is_new_dr: 産出動詞付きなら True（処理記述の裸名詞を除外用）— Phase 3 で埋める
+    """
+    position: int
+    modifier: str | None = None
+    is_new_dr: bool | None = None
+
+
+def _collect_defined_nouns(tokens) -> dict[str, list['Occurrence']]:
+    """トークン列から定義済み名詞句を収集（名詞句 → Occurrence リスト）。
+
+    同一名詞句が複数回登場すれば list の長さがそれを示す。
+    同一クレーム内での重複 DR 導入の検出に利用できる。
+    """
     # 「X である Y」定義構文の属（X）は型指定であり談話参照子ではないため除外
     dearu_defs = _find_dearu_defs(tokens)
     dearu_genus_starts = {start for _, _, start in dearu_defs}
 
-    nouns = {}
+    nouns: dict[str, list[Occurrence]] = {}
     i = 0
     n = len(tokens)
-    # 形式名詞・副詞可能名詞・副詞・感動詞は単独では先行詞候補に登録しない
-    # → _is_formal_noun_tok() の品詞ルールで判定（リスト不要）
-    # 追加除外語: 意味的に先行詞候補にならない語
     _SKIP_EXTRA = {'特徴', '内容', '種類'}
     while i < n:
         t = tokens[i]
-        # 照応詞の直後は定義語ではなく参照語なのでスキップ
-        # 照応詞トークン自体を飛ばすだけでなく、直後の名詞句全体もスキップする
+        # 照応詞の直後は参照語なのでスキップ
         if t['surf'] in _ZENSHOU_WORDS:
-            # 直後の名詞句を読み飛ばす
             skip_span = _noun_span(tokens, i + 1)
             i += 1 + (len(skip_span) if skip_span else 0)
             continue
-        # カタカナ形状詞（アクティブ等）も名詞句の起点として扱う
         _is_kata_keijo = (t['pos'] == '形状詞' and t['surf']
                           and all('゠' <= c <= 'ヿ' for c in t['surf']))
-        # 非カタカナ形状詞 + 後続名詞 → 複合名詞の起点（「新規解析結果」等）
         _is_keijo_noun_prefix = (
             t['pos'] == '形状詞' and t['surf']
             and not all('゠' <= c <= 'ヿ' for c in t['surf'])
             and i + 1 < n and _is_noun_tok(tokens[i + 1])
         )
         if _is_noun_tok(t) or _is_kata_keijo or _is_keijo_noun_prefix:
-            # 「X である Y」の属（X）は先行詞から除外
             if i in dearu_genus_starts:
                 span = _noun_span(tokens, i)
                 i += len(span) if span else 1
                 continue
             span = _noun_span(tokens, i)
             s = _span_to_str(span)
-            # 除外条件:
-            #   1) 1トークンで形式名詞 → 品詞ルールで除外
-            #   2) _SKIP_EXTRA（特徴・内容・種類）
-            # ※単字名詞（鏡・光・差等）は前記に続く要素名として有効なため除外しない
-            # 数詞＋接尾辞名詞的のみの量化子（「１つ」「２個」等）は先行詞候補として無効
             _is_counter_expr = (
                 span and len(span) <= 2
                 and span[0]['pos1'] == '数詞'
@@ -504,14 +509,13 @@ def _collect_defined_nouns(tokens):
                        or _is_counter_expr
                        or (len(span) == 1 and _is_formal_noun_tok(span[0])))
             if not is_skip:
-                nouns[s] = nouns.get(s, 0) + 1
+                nouns.setdefault(s, []).append(Occurrence(position=i))
                 # パターンC: 末尾トークンが数詞（符号番号）の場合
                 # 「収容部２０」→「収容部」もベース名詞として登録
-                # （「該収容部内」の先行詞「収容部」が見つかるようにするため）
                 if (len(span) >= 2 and span[-1]['pos1'] == '数詞'):
                     base = _span_to_str(span[:-1])
                     if len(base) >= 2 and base not in _SKIP_EXTRA:
-                        nouns[base] = nouns.get(base, 0) + 1
+                        nouns.setdefault(base, []).append(Occurrence(position=i))
             i += len(span) if span else 1
         else:
             i += 1
