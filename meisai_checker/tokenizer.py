@@ -4,6 +4,7 @@
 
 名詞句抽出・照応詞認識・先行詞候補収集のコア実装。
 """
+from __future__ import annotations
 import os
 import re
 from dataclasses import dataclass, field
@@ -125,7 +126,7 @@ def _is_formal_noun_tok(t):
 
 _LIMITERS = {
     # 量化・選択
-    '複数', '一部', '他', '別', '各', '全て', 'すべて', 'それぞれ',
+    '複数', '一部', '他', '各', '全て', 'すべて', 'それぞれ',
     '一方', '他方', '両方', '双方', '少数', '多数', '全部',
     # 規定・特定（「所定の閾値」「特定の波長」等）
     '所定', '特定', '一定', '所望', '相互', '予定',
@@ -145,7 +146,7 @@ _QUANT_MODS = {
 }
 
 # ケースB: 序列修飾語（異なる符号を区別して指す）
-_ORDINAL_MODS = {'一方', '他方', '他', '別'}
+_ORDINAL_MODS = {'一方', '他方', '他'}
 
 def _strip_quant_prefix(name_toks):
     """名詞トークン列の先頭から量化/序列修飾語を除去し核名詞列と種別を返す。
@@ -590,6 +591,21 @@ def _noun_after_zenshou(tokens, zenshou_idx):
                             and tokens[k-1]['pos1'] == '一般'):
                         return tokens[k-1]['surf'] + y, tokens[k-1]['start'], span_y[-1]['end']
                     return y, span_y[0]['start'], span_y[-1]['end']
+
+    # 数詞＋「の」パターン（「一のN」等の限定量化子）
+    # 「前記一のひねり操作」→「操作」（ひねりが動詞品詞でも後続名詞を取得）
+    # 「第N」（接頭辞「第」付き）は序数修飾として通常パターンに任せる
+    if (t1['pos1'] == '数詞'
+            and j + 1 < n and tokens[j + 1]['surf'] == 'の'):
+        k = j + 2
+        # 動詞連用形（ひねり操作の「ひねり」等）を読み飛ばす
+        while k < n and tokens[k]['pos'] == '動詞':
+            k += 1
+        if k < n and _is_noun_tok(tokens[k]) and not _is_fugo_tok(tokens[k]):
+            span_y = _noun_span(tokens, k)
+            y = _span_to_str(span_y)
+            if len(y) >= 2:
+                return y, span_y[0]['start'], span_y[-1]['end']
 
     # 形状詞修飾パターン
     # 弁別基準: 助動詞「な（だ連体形）」の有無

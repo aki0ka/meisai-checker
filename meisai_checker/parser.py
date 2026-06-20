@@ -123,7 +123,7 @@ def parse_dependencies(claim_text):
 
     # 範囲展開: 請求項N〜M / 請求項NからM / 請求項N乃至M
     for m in re.finditer(
-            r'請求項(\d+)\s*(?:〜|～|乃至|から)\s*(?:請求項)?(\d+)', text):
+            r'請求項(\d+)\s*(?:[〜～~]|乃至|から)\s*(?:請求項)?(\d+)', text):
         deps |= set(range(int(m.group(1)), int(m.group(2)) + 1))
 
     # 接続詞をカンマに正規化
