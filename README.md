@@ -110,6 +110,20 @@ uv cache clean
 
 ---
 
+### Windows でダブルクリック起動する
+
+uv がインストール済みであれば、以下の内容を `meisai-checker.bat` という名前で保存するだけで、ダブルクリックから起動できます。
+
+```bat
+@echo off
+uvx meisai-checker
+pause
+```
+
+デスクトップや任意のフォルダに置いて使ってください。
+
+---
+
 ### Mac でアプリとして Dock に固定する
 
 uv がインストール済みであれば、以下のコマンド1つで `~/Applications/meisai-checker.app` が作成されます。
