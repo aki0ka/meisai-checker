@@ -93,12 +93,20 @@ def get_all_ancestors(num, dep_map, _cache=None):
     return ancestors
 
 
-def _scope_tokens_for_parent(parent, dep_map, claims, cache):
-    """親請求項1つのフルスコープ（親＋その全祖先）のトークンリストを返す。"""
+def _scope_tokens_for_parent(parent, dep_map, claim_tokens, cache, _scope_cache=None):
+    """親請求項1つのフルスコープ（親＋その全祖先）のトークンリストを返す。
+
+    claim_tokens: プリトークナイズ済みの dict[int, list[token]]
+    _scope_cache: 親ごとの結果キャッシュ（呼び出し元が渡す）
+    """
+    if _scope_cache is not None and parent in _scope_cache:
+        return _scope_cache[parent]
     anc = get_all_ancestors(parent, dep_map, cache)
     toks = []
     for a in sorted(anc | {parent}):
-        toks += _tokenize(claims.get(a, ''))
+        toks += claim_tokens.get(a, [])
+    if _scope_cache is not None:
+        _scope_cache[parent] = toks
     return toks
 
 
@@ -114,22 +122,20 @@ def _extract_final_noun(tokens):
     return None
 
 
-def _bare_claims_tokenized(noun, scope_body_items):
+def _bare_claims_tokenized(noun, scope_body_items, precomputed_defined=None):
     """nounが照応詞なしで出現する請求項番号のセットを返す。
 
     scope_body_items: dict[claim_num, (tokens, claim_text)]
-    前文（プリアンブル）も検索対象に含める。プリアンブルに先行詞を書いて
-    本文で照応するパターン（「Xであって、前記X…」）が適法なため。
-    - _collect_defined_nouns が照応詞直後をスキップするため、照応詞付き出現は除外される。
-    - noun が1回でも「請求項Nに記載の〜」形式で出現する請求項は「継承」とみなし除外。
-      （末尾の発明種類表現「ことを特徴とするX」等で再出現しても独立定義として扱わない）
+    precomputed_defined: dict[claim_num, dict] — _collect_defined_nouns の結果キャッシュ
     """
     found_in = set()
     for claim_num, (body_toks, body_text) in scope_body_items.items():
-        # 発明宣言名（クレーム末尾のタイトル名詞句）は DR 登録対象外
-        title_start = _get_title_noun_start(body_toks)
-        check_toks = body_toks[:title_start] if title_start is not None else body_toks
-        defined = _collect_defined_nouns(check_toks)
+        if precomputed_defined is not None and claim_num in precomputed_defined:
+            defined = precomputed_defined[claim_num]
+        else:
+            title_start = _get_title_noun_start(body_toks)
+            check_toks = body_toks[:title_start] if title_start is not None else body_toks
+            defined = _collect_defined_nouns(check_toks)
         if noun not in defined:
             continue
         # noun が請求項引用で導入されている請求項は継承とみなして除外
@@ -203,6 +209,19 @@ def check_zenshou(claims, dep_map):
         n: (claim_tokens[n], b) for n, b in claims.items()
     }
 
+    # _collect_defined_nouns / _find_dearu_defs をプリ計算（ループ内での再計算を避ける）
+    # _collect_defined_nouns はタイトル名詞句を除外した範囲で計算（_bare_claims_tokenized と同条件）
+    claim_defined_nouns = {}
+    for _n, _toks in claim_tokens.items():
+        _title_start = _get_title_noun_start(_toks)
+        _check_toks = _toks[:_title_start] if _title_start is not None else _toks
+        claim_defined_nouns[_n] = _collect_defined_nouns(_check_toks)
+    claim_dearu_defs = {
+        n: _find_dearu_defs(toks) for n, toks in claim_tokens.items()
+    }
+    # _scope_tokens_for_parent の結果キャッシュ
+    _scope_toks_cache: dict[int, list] = {}
+
     # 早いものがち戦略：特許請求の範囲全体を文字列順（請求項番号順）に走査し、
     # 各核名詞の初出時の量化子状態（複数のN が先か裸 N が先か）を記録する。
     # noun -> True（複数のN が先行）/ False（裸 N が先行）
@@ -217,7 +236,7 @@ def check_zenshou(claims, dep_map):
         tokens = claim_tokens[num]
 
         # 「X である Y」定義構文を検出してINFO発行
-        for genus_str, named_str, _ in _find_dearu_defs(tokens):
+        for genus_str, named_str, _ in claim_dearu_defs[num]:
             issues.append({
                 'claim': num, 'level': 'info',
                 'word': named_str, 'noun': named_str,
@@ -376,13 +395,13 @@ def check_zenshou(claims, dep_map):
                             for parent in direct_parents:
                                 p_ancs = get_all_ancestors(parent, dep_map, _cache) | {parent}
                                 p_items = {a: claim_body_items[a] for a in p_ancs if a in claim_body_items}
-                                p_bare = _bare_claims_tokenized(noun, p_items)
+                                p_bare = _bare_claims_tokenized(noun, p_items, claim_defined_nouns)
                                 if len(p_bare) > 1:
                                     bare |= p_bare
                         else:
                             anc_body_toks = {a: claim_body_items[a] for a in ancestors if a in claim_body_items}
-                            bare = _bare_claims_tokenized(noun, anc_body_toks)
-                            if noun in _collect_defined_nouns(tokens[:i]):
+                            bare = _bare_claims_tokenized(noun, anc_body_toks, claim_defined_nouns)
+                            if noun in _collect_defined_nouns(tokens[:i]):  # i未満なのでプリ計算不可
                                 bare.add(num)
                         if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
                             _uniqueness_seen.add((num, noun))
@@ -401,7 +420,7 @@ def check_zenshou(claims, dep_map):
                     # 「請求項1又は2に記載の〜」は一方が適用されるので、
                     # 一方のスコープで見つかれば先行詞として成立する
                     _parent_results = [
-                        _found_in_scope_ex(noun, _scope_tokens_for_parent(p, dep_map, claims, _cache))
+                        _found_in_scope_ex(noun, _scope_tokens_for_parent(p, dep_map, claim_tokens, _cache, _scope_toks_cache))
                         for p in direct_parents
                     ]
                     found = any(r[0] for r in _parent_results)
