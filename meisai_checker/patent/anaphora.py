@@ -171,7 +171,7 @@ def _uniqueness_warning(num, surf, noun, bare_claims):
         'claim': num, 'level': 'warning',
         'word': surf, 'noun': noun,
         'msg': (f"請求項{num}：「{surf}{noun}」の先行詞が"
-                f"複数の請求項（{sorted(bare_claims)}）に存在します（唯一性の崩壊）。"
+                f"複数の請求項（{sorted(bare_claims)}）に存在します（先行詞重複）。"
                 f"各{noun}に固有の名称を付与することを検討してください。"),
     }
 

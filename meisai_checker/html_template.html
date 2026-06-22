@@ -1121,7 +1121,7 @@ function buildM23BotAll(body, d) {
       statusCls = 'm3-info'; statusTxt = 'ℹ 記述照応詞';
     } else if (row.uniquenessWarning) {
       label = row.firstClaim + '-' + row.refClaim;
-      statusCls = 'm3-err-ambig'; statusTxt = '⚠ 唯一性の崩壊';
+      statusCls = 'm3-err-ambig'; statusTxt = '⚠ 先行詞重複';
     } else {
       label = row.firstClaim + '-' + row.refClaim;
       statusCls = 'm3-ok'; statusTxt = '✓ 請求項' + row.firstClaim + 'で定義';
