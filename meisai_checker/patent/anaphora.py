@@ -463,36 +463,7 @@ def check_zenshou(claims, dep_map):
                             ),
                         })
                         suppressed = True
-                    else:
-                        # ③④ 主要部一致（型の弱化）チェック
-                        _prefix_def = _collect_defined_nouns(prefix)
-                        _head_matches = [
-                            k for k in _prefix_def
-                            if k != noun and k.endswith(noun) and len(k) > len(noun)
-                        ]
-                        if len(_head_matches) == 1:
-                            issues.append({
-                                'claim': num, 'level': 'warning',
-                                'word': t['surf'], 'noun': noun,
-                                'msg': (
-                                    f"請求項{num}：「{t['surf']}{noun}」は型の弱化による参照です"
-                                    f"（先行詞候補：「{_head_matches[0]}」）。"
-                                    f"競合する別要素が増えると参照が曖昧になります。"
-                                    f"「{t['surf']}{_head_matches[0]}」と完全形で記載することを推奨します。"
-                                ),
-                            })
-                            suppressed = True
-                        elif len(_head_matches) > 1:
-                            issues.append({
-                                'claim': num, 'level': 'error',
-                                'word': t['surf'], 'noun': noun,
-                                'msg': (
-                                    f"請求項{num}：「{t['surf']}{noun}」の主要部に一致する先行詞が"
-                                    f"複数あります（候補：{'・'.join(_head_matches)}）。"
-                                    f"どの要素を指すか確定できません。完全形で記載してください。"
-                                ),
-                            })
-                            suppressed = True
+                    # else: ⑤より先行詞が見つからない → suppressedのまま → 下のエラー報告へ
 
                 if not suppressed:
                     if t['surf'] not in _TOUGAI_WORDS and len(direct_parents) > 1:
