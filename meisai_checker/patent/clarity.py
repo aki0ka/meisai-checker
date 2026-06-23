@@ -193,9 +193,10 @@ _CHANGE_WAGO_PAT = re.compile(
 )
 
 _COMPARISON_BASIS_PAT = re.compile(
-    r'比べ|比較|より(?:も)?|に対し|を用いない|しない場合|がない場合|従来|前者|後者'
+    r'比べ|比較|比して|より(?:も)?|に対し|を用いない|しない場合|がない場合|従来|前者|後者'
     r'|閾値|しきい値|閾|未満|以下|以上|超え'  # 数値基準による比較
-    r'|特定の|所定の|予め定め|あらかじめ定め',  # 暗黙の基準値が存在する表現
+    r'|特定の|所定の|予め定め|あらかじめ定め'  # 暗黙の基準値が存在する表現
+    r'|無視でき',  # 「無視できる程度に」は暗黙の比較基準（機能要件に対して無視できる量）
     re.UNICODE,
 )
 
@@ -249,11 +250,16 @@ def _has_change_verb(text: str) -> bool:
 
 
 def _is_correlation_expr(sentence: str) -> bool:
-    """連動語の前後それぞれに変化動詞があれば連動表現とみなす。"""
+    """連動表現（〜ほど、〜につれ等）かどうかを判定。
+
+    「遠ざかるほど狭まる」のような空間形状記述では連動語の前方が
+    空間的参照点（遠ざかる等）であり、変化動詞でなくてよい。
+    連動語の後方に変化動詞があれば連動表現とみなす。
+    """
     m = _CORRELATION_CONNECTIVE_PAT.search(sentence)
     if not m:
         return False
-    return _has_change_verb(sentence[:m.start()]) and _has_change_verb(sentence[m.end():])
+    return _has_change_verb(sentence[m.end():])
 
 
 def _split_sentences(text: str) -> list[str]:

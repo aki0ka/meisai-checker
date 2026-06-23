@@ -249,6 +249,21 @@ def _collect_fugo_suffix(tokens, start_idx):
     if j < n and tokens[j]['surf'] in _UNIT_AFTER_DIGITS:
         return [], j
 
+    # カタカナ単位語が続く場合は寸法・数量表現として符号ではない（幅７０ミリメートル等）
+    _UNIT_KATAKANA = frozenset({
+        'ミリメートル', 'センチメートル', 'メートル', 'キロメートル',
+        'ミリ', 'センチ', 'キロ', 'メガ', 'ギガ', 'テラ', 'マイクロ', 'ナノ', 'ピコ',
+        'グラム', 'キログラム', 'ミリグラム',
+        'リットル', 'ミリリットル', 'ミクロン',
+        'パスカル', 'メガパスカル', 'ギガパスカル',
+        'ニュートン', 'ワット', 'キロワット',
+        'ヘルツ', 'キロヘルツ', 'メガヘルツ', 'ギガヘルツ',
+        'ボルト', 'アンペア', 'オーム',
+        'ミリ秒', 'マイクロ秒', 'ナノ秒',
+    })
+    if j < n and tokens[j]['surf'] in _UNIT_KATAKANA:
+        return [], j
+
     # ハイフン付きサフィックス: 全角数詞の後に「－」＋数詞/名詞
     # 例: １００３－１, １００３－ｎ, １００１－Ａ
     if (j + 1 < n
@@ -501,12 +516,21 @@ def _extract_elements_tokens(text):
                         break
                     j += 1
 
-                # 接尾辞（口・物・体・器・面等）が直後に符号を伴う場合は要素名に取り込む
-                # 例: 吸入口２２１ → 吸入(名詞)+口(接尾辞)+２２１ → 「吸入口」として抽出
-                if (j < n
-                        and tokens[j]['pos'] == '接尾辞'
+                # 接尾辞（部・口・体・器・面等）が直後に符号または括弧+符号を伴う場合は要素名に取り込む
+                # 例: 吸入口２２１ → 「吸入口」抽出
+                #     平面部（１０１１１）→ 「平面部」抽出
+                if j < n and tokens[j]['pos'] == '接尾辞':
+                    _nxt = tokens[j + 1] if j + 1 < n else None
+                    _nxt2 = tokens[j + 2] if j + 2 < n else None
+                    if _nxt and (_is_fugo_tok(_nxt) or
+                                 (_nxt['surf'] == '（' and _nxt2 and _is_fugo_tok(_nxt2))):
+                        j += 1  # 接尾辞を要素名に取り込む
+
+                # 括弧形式「要素名（符号）」: 全角開き括弧を読み飛ばす
+                # 例: 吸収体（１０８１）→ j が「（」を指している場合にスキップ
+                if (j < n and tokens[j]['surf'] == '（'
                         and j + 1 < n and _is_fugo_tok(tokens[j + 1])):
-                    j += 1
+                    j += 1  # 「（」をスキップして符号トークンへ
 
                 if j < n and _is_fugo_tok(tokens[j]):
                     noun_toks_raw = tokens[i:j]
