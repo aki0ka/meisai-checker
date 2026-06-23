@@ -773,13 +773,12 @@ def _found_in_scope_ex(noun, scope_tokens):
     if noun in defined:
         return True, None
     if noun and noun[-1] in _LOC_SUFFIXES and len(noun) > 2:
-        toks_n = _tokenize(noun + 'に')
-        if (len(toks_n) >= 2
-                and toks_n[-2]['surf'] == noun[-1]
-                and toks_n[-1]['surf'] == 'に'):
-            base = noun[:-1]
-            if len(base) >= 2 and base in defined:
-                return True, None
+        # 末尾の位置接尾辞を除去して再検索（例：「蓋部内」→「蓋部」）
+        # MeCabが「部内」を複合名詞化するケース（蓋部内/収容部内等）でも対応するため
+        # 再トークナイズ検証は行わず、base が定義済みかどうかだけで判定する
+        base = noun[:-1]
+        if len(base) >= 2 and base in defined:
+            return True, None
     # 例外3: 限定詞+核名詞で再検索（「分岐画像」→「所定の分岐画像」）
     # 「所定の分岐画像」で定義されている場合、「前記分岐画像」で照応できるようにする
     # ただし同一性変更限定詞（他・別）は除外：「他のX」≠「X」なので「前記X」では照応不可
