@@ -516,15 +516,19 @@ def _extract_elements_tokens(text):
                         break
                     j += 1
 
-                # 接尾辞（部・口・体・器・面等）が直後に符号または括弧+符号を伴う場合は要素名に取り込む
-                # 例: 吸入口２２１ → 「吸入口」抽出
-                #     平面部（１０１１１）→ 「平面部」抽出
+                # 接尾辞列（部・口・体・器・面・化・帯等）が符号または括弧+符号の直前まで
+                # 続く場合、接尾辞をすべて要素名に取り込む
+                # 例: 吸入口２２１ → 「吸入口」抽出（接尾辞1つ）
+                #     連続厚化帯１０８１ → 「連続厚化帯」抽出（接尾辞3つ）
                 if j < n and tokens[j]['pos'] == '接尾辞':
-                    _nxt = tokens[j + 1] if j + 1 < n else None
-                    _nxt2 = tokens[j + 2] if j + 2 < n else None
+                    k = j
+                    while k < n and tokens[k]['pos'] == '接尾辞':
+                        k += 1
+                    _nxt = tokens[k] if k < n else None
+                    _nxt2 = tokens[k + 1] if k + 1 < n else None
                     if _nxt and (_is_fugo_tok(_nxt) or
                                  (_nxt['surf'] == '（' and _nxt2 and _is_fugo_tok(_nxt2))):
-                        j += 1  # 接尾辞を要素名に取り込む
+                        j = k  # 接尾辞列すべてを要素名に取り込む
 
                 # 括弧形式「要素名（符号）」: 全角開き括弧を読み飛ばす
                 # 例: 吸収体（１０８１）→ j が「（」を指している場合にスキップ
