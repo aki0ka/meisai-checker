@@ -22,7 +22,7 @@ from ..tokenizer import (
     _ZENSHOU_WORDS,
     _TOUGAI_WORDS,
     _QUANT_MODS,
-    _LOC_SUFFIXES,
+    _LOC_SUFFIXES_BOUNDARY,
     _LEADING_QUANT_PREFIXES,
 )
 
@@ -67,7 +67,8 @@ def _strip_loc_suffix(noun: str) -> str:
     # 「noun + に」をトークナイズし、「に」直前が loc_suffix の単独1文字トークンであれば除去。
     # 「区間」「期間」等は「区間に」→[区間(名詞),に]で区間が2文字トークンになるため除去しない。
     # 「土台側」は「土台側に」→[土台,側(1文字),に]で側が単独トークンになるため除去する。
-    for loc_suffix in _LOC_SUFFIXES:
+    # 「ノード間」等の「間」は単独で新しい談話参照子を形成しうるため除去対象外。
+    for loc_suffix in _LOC_SUFFIXES_BOUNDARY:
         if noun.endswith(loc_suffix):
             toks = _tokenize(noun + 'に')
             if (len(toks) >= 2

@@ -82,6 +82,13 @@ _ITER_SUFFIXES = {'ごと', '毎', '向け', '用', '別', '系', '類'}
 # 例: 「距離内」→照合は「距離」で行う
 _LOC_SUFFIXES = {'内', '外', '上', '下', '中', '間', '側', '前', '後', '先'}
 
+# 名詞句境界・先行詞照合フォールバック専用の位置接尾辞集合。
+# 「間」は「ノード間」のように単独で新しい談話参照子（区間・空間概念）を
+# 形成しうるため、ここでは核名詞への修飾語とみなさず除外する。
+# （_is_formal_noun_tok の形式名詞判定では「間」を含む _LOC_SUFFIXES を使い続ける。
+#  「工程の間に」等の時間的用法を実質名詞として扱う目的は別物なので影響しない）
+_LOC_SUFFIXES_BOUNDARY = _LOC_SUFFIXES - {'間'}
+
 # 形式名詞・副詞的名詞：名詞句の「継続」を打ち切るデリミタ
 # 「複数の前記パルス光のうちパルス光」→「うち」で停止
 # 意味的形式名詞：品詞だけでは判定できないため明示リスト
@@ -281,7 +288,14 @@ def _noun_span(tokens, start_idx):
                 continue
             break
         # 位置接尾辞（内・外・上等）が接尾辞品詞のとき停止
-        if t['pos'] == '接尾辞' and t['surf'] in _LOC_SUFFIXES:
+        # 「間」は「ノード間」等の複合名詞を形成しうるため境界扱いしない（別枠で常に継続）
+        # それ以外は「容器内空間」のように次が名詞なら複合語として継続、
+        # 「基板上に」のように次が名詞でなければ位置修飾語とみなし停止
+        if t['pos'] == '接尾辞' and t['surf'] in _LOC_SUFFIXES_BOUNDARY:
+            if i + 1 < n and _is_noun_tok(tokens[i + 1]):
+                span.append(t)
+                i += 1
+                continue
             break
         # 範囲接尾語（以上・以下・未満・超等）は名詞句に含めず停止
         if t['surf'] in _RANGE_SUFFIXES:
@@ -772,7 +786,7 @@ def _found_in_scope_ex(noun, scope_tokens):
     defined = _collect_defined_nouns(scope_tokens)
     if noun in defined:
         return True, None
-    if noun and noun[-1] in _LOC_SUFFIXES and len(noun) > 2:
+    if noun and noun[-1] in _LOC_SUFFIXES_BOUNDARY and len(noun) > 2:
         # 末尾の位置接尾辞を除去して再検索（例：「蓋部内」→「蓋部」）
         # MeCabが「部内」を複合名詞化するケース（蓋部内/収容部内等）でも対応するため
         # 再トークナイズ検証は行わず、base が定義済みかどうかだけで判定する
