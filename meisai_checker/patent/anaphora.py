@@ -517,10 +517,22 @@ def check_zenshou(claims, dep_map):
                                 f"括弧書きを省いた「{_PAREN_PAT.sub('', _bridge_src)}」で"
                                 f"先に導入することを推奨します。"),
                     })
-                anc_body_toks = {a: claim_body_items[a] for a in ancestors if a in claim_body_items}
-                bare = _bare_claims_tokenized(noun, anc_body_toks)
-                if noun in _collect_defined_nouns(tokens[:i]):
-                    bare.add(num)
+                if len(direct_parents) > 1:
+                    # 多項従属: 各親スコープで独立して唯一性を評価。
+                    # 「請求項3又は4に記載の〜」は一方を選べば必ず一意なので、
+                    # いずれか1つの親スコープ内で複数定義がある場合のみ警告する。
+                    bare = set()
+                    for parent in direct_parents:
+                        p_ancs = get_all_ancestors(parent, dep_map, _cache) | {parent}
+                        p_items = {a: claim_body_items[a] for a in p_ancs if a in claim_body_items}
+                        p_bare = _bare_claims_tokenized(noun, p_items, claim_defined_nouns)
+                        if len(p_bare) > 1:
+                            bare |= p_bare
+                else:
+                    anc_body_toks = {a: claim_body_items[a] for a in ancestors if a in claim_body_items}
+                    bare = _bare_claims_tokenized(noun, anc_body_toks)
+                    if noun in _collect_defined_nouns(tokens[:i]):
+                        bare.add(num)
                 if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
                     _uniqueness_seen.add((num, noun))
                     issues.append(_uniqueness_warning(num, t['surf'], noun, bare))
