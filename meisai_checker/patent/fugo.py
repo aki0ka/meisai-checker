@@ -532,12 +532,14 @@ def _extract_elements_tokens(text):
 
                 # 括弧形式「要素名（符号）」: 全角開き括弧を読み飛ばす
                 # 例: 吸収体（１０８１）→ j が「（」を指している場合にスキップ
+                # name_end は「（」を含めない要素名の境界（jはこの後符号トークンまで進める）
+                name_end = j
                 if (j < n and tokens[j]['surf'] == '（'
                         and j + 1 < n and _is_fugo_tok(tokens[j + 1])):
                     j += 1  # 「（」をスキップして符号トークンへ
 
                 if j < n and _is_fugo_tok(tokens[j]):
-                    noun_toks_raw = tokens[i:j]
+                    noun_toks_raw = tokens[i:name_end]
                     # 逆スキャン: 1文字接尾辞かつ直前に動詞が隣接する場合、
                     # 動詞連用形も要素名に取り込む（例: 切り刃→切り+刃）
                     # 接尾辞限定：普通名詞（蓋・歯等）は連体節末尾の動詞を取り込まない
@@ -778,11 +780,22 @@ def check_fugo(claims, sections):
         })
 
     # ④ 半角数字の符号（STYLE）
+    # 半角数字＋単位（例: 10V, 5mm）は「数量は半角で書く」という規約上正当なので対象外とする。
+    # 単位が続かない半角数字（第1・請求項1・収容部10 等）は引き続き警告する。
+    _HALF_UNIT_WORDS = frozenset({
+        'V', 'A', 'W', 'N', 'J', 'F', 'K', 'S', 'T', 'H', 'L', 'C', 'Pa',
+        'mm', 'cm', 'km', 'kg', 'mg', 'ms', 'ns', 'nm', 'Hz', 'kHz', 'MHz', 'GHz',
+        'dB', 'kPa', 'MPa', 'Wb', 'Sv', 'Gy', 'Bq', 'lm', 'lx', 'eV', 'Da',
+        '℃', '°C', '%', '°',
+    })
     seen_half = set()
     for line_no, line in enumerate(desc_text.splitlines(), 1):
         tokens = _tokenize(line)
         for i2, t in enumerate(tokens):
             if not _is_half_digit(t['surf']) or t['pos1'] != '数詞':
+                continue
+            next_surf = tokens[i2 + 1]['surf'] if i2 + 1 < len(tokens) else ''
+            if next_surf in _HALF_UNIT_WORDS:
                 continue
             j2 = i2 - 1
             name_parts = []
