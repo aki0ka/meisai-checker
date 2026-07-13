@@ -81,7 +81,8 @@ def analyze(text, _skip_blocks=False):
     # 改行コード正規化: CRLF→LF, CR単独→LF
     text = text.replace('\r\n', '\n').replace('\r', '\n')
     sections  = split_sections(text)
-    claims    = parse_claims(sections.get('claims', text))
+    header_memo_issues = []
+    claims    = parse_claims(sections.get('claims', text), header_memo_issues)
     lines     = text.splitlines()
     para_nums = re.findall(r'【\d{4}】', text)
 
@@ -149,7 +150,7 @@ def analyze(text, _skip_blocks=False):
         + check_other_device_internals(claims, kinds)
         + check_purpose_only(claims, kinds)
     )
-    m2_issues = check_dependency(claims, dep_map, kinds) + m2b_issues
+    m2_issues = check_dependency(claims, dep_map, kinds) + m2b_issues + header_memo_issues
     m3_issues = check_zenshou(claims, dep_map)
     style_issues = check_pronoun_variants(claims)
     m4_issues, element_table, fugo_table, var_table = check_fugo(claims, sections)

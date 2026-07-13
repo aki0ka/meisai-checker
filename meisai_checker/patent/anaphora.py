@@ -80,16 +80,25 @@ def _strip_loc_suffix(noun: str) -> str:
     return noun
 
 
-def get_all_ancestors(num, dep_map, _cache=None):
-    """指定請求項の全祖先（直接・間接の従属元）を再帰的に収集する"""
+def get_all_ancestors(num, dep_map, _cache=None, _visiting=None):
+    """指定請求項の全祖先（直接・間接の従属元）を再帰的に収集する。
+
+    誤記載等で従属関係に循環がある場合でも無限再帰に陥らないよう、
+    探索中の経路（_visiting）を追跡し循環を検出したら打ち切る。
+    """
     if _cache is None:
         _cache = {}
     if num in _cache:
         return _cache[num]
+    if _visiting is None:
+        _visiting = set()
+    if num in _visiting:
+        return set()
+    _visiting = _visiting | {num}
     ancestors = set()
     for d in dep_map.get(num, []):
         ancestors.add(d)
-        ancestors |= get_all_ancestors(d, dep_map, _cache)
+        ancestors |= get_all_ancestors(d, dep_map, _cache, _visiting)
     _cache[num] = ancestors
     return ancestors
 

@@ -82,16 +82,53 @@ def split_sections(text):
     return sections
 
 
-def parse_claims(text):
+# 【請求項Ｎ】直後・改行までの「禁止位置」に書かれたメモの開始記号
+# （技術用語の頭文字との衝突を避けるため記号のみに限定。【〔［「は既存の
+#  セクション見出し／引用符と衝突するため除外）
+_HEADER_MEMO_MARKERS = ('（', '(', '※', '＃', '#', '＊', '*')
+_WS_PAT = re.compile(r'[ \t　]')
+
+
+def _strip_header_memo(raw_body):
+    """【請求項Ｎ】直後・改行までの間（禁止位置）に記載されたメモを検出し除去する。
+
+    現行の特許庁運用では【請求項Ｎ】と改行の間に文字があってはならないが、
+    実務では編集用メモ（旧請求項番号等）が書き込まれることがある。
+    記号（（(※＃#＊*）で始まる場合のみメモとみなし、それ以外（旧様式で
+    改行前に正規の請求項本文が始まるケース等）はそのまま残す。
+
+    戻り値: (cleaned_body, memo_text or None)
+    """
+    nl = raw_body.find('\n')
+    if nl < 0:
+        return raw_body, None
+    first_line = raw_body[:nl]
+    stripped = _WS_PAT.sub('', first_line)
+    if not stripped or stripped[0] not in _HEADER_MEMO_MARKERS:
+        return raw_body, None
+    return raw_body[nl + 1:], first_line.strip()
+
+
+def parse_claims(text, _memo_issues=None):
     """請求項テキストを番号→本文の辞書に分解する。
     最大番号の請求項は「。」で終端し、それ以降のノイズ（詳細な説明等）を除去する。
+
+    _memo_issues: 渡された場合、【請求項Ｎ】直後の禁止位置から除去したメモを
+                  {'claim': num, 'level': 'info', 'msg': ...} の形で追記する。
     """
     claims = {}
     for m in re.finditer(
             r'【請求項([０-９0-9]+)】(.*?)(?=【請求項[０-９0-9]+】|【[^０-９0-9]|$)',
             text, re.DOTALL):
         num  = int(z2h(m.group(1)))
-        body = m.group(2).strip()
+        raw_body, memo = _strip_header_memo(m.group(2))
+        if memo is not None and _memo_issues is not None:
+            _memo_issues.append({
+                'claim': num, 'level': 'info',
+                'msg': (f"請求項{num}：【請求項{num}】の直後（改行前の禁止位置）に"
+                        f"記載されていた「{memo}」を除去して解析しました。"),
+            })
+        body = raw_body.strip()
         # 最初の「。」で切り捨て（それ以降は次請求項との間のノイズ）
         kuten = body.find('。')
         if kuten >= 0:

@@ -432,7 +432,9 @@ def _find_dearu_defs(tokens):
                     if named_span:
                         genus_str = _span_to_str(span)
                         named_str = _span_to_str(named_span)
-                        if len(genus_str) >= 2 and len(named_str) >= 2:
+                        # 「Xである請求項１に記載の...」は請求項参照であり定義構文ではない
+                        if (len(genus_str) >= 2 and len(named_str) >= 2
+                                and not named_str.startswith('請求項')):
                             defs.append((genus_str, named_str, i))
             i += len(span)
         else:
