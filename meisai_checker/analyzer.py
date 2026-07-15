@@ -47,7 +47,7 @@ from .patent.fugo import (  # noqa: F401
     _is_fugo_exclude, _is_fugo_exclude_tok, _is_koho_name, _is_koho_name_part,
     _parse_fugo_setsumeisho, _extract_elements_tokens, _collect_fugo_suffix,
     _offset_to_para_id, _lineno_to_para_id,
-    _KOHO_PAT, _KOHO_PART_PAT, _KOHO_SUFFIX,
+    _KOHO_PAT, _KOHO_PART_FRAGMENTS, _KOHO_SUFFIX,
     _is_zenkaku_digit, _is_zenkaku_upper, _is_zenkaku_lower,
     _is_zenkaku_alpha, _is_half_digit, _is_katakana_lead,
 )

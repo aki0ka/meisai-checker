@@ -1350,7 +1350,7 @@ function buildFugoTab(con, d) {
   con.appendChild(botDiv);
   if (vt.length > 0) con.appendChild(varDiv);
 
-  // 符号の説明生成セクション
+  // 符号の説明生成セクション（ボタン列のみ。結果はポップアップダイアログで表示）
   if (ft.length > 0) {
     var genDiv = document.createElement('div');
     genDiv.style.cssText = 'flex:0 0 auto;border-top:2px solid var(--border)';
@@ -1365,36 +1365,67 @@ function buildFugoTab(con, d) {
         '</select>' +
         '<button class="fugo-gen-btn" style="font-size:10px;padding:2px 8px;cursor:pointer;' +
           'background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--ink)">生成</button>' +
-      '</div>' +
-      '<div class="fugo-gen-area" style="display:none;padding:6px 10px">' +
-        '<textarea class="fugo-gen-ta" style="width:100%;box-sizing:border-box;height:140px;' +
-          'font-family:var(--mono);font-size:11px;background:var(--surface);color:var(--ink);' +
-          'border:1px solid var(--border);border-radius:3px;padding:6px;resize:vertical;display:block"></textarea>' +
-        '<button class="fugo-copy-btn" style="margin-top:4px;font-size:10px;padding:2px 10px;cursor:pointer;' +
-          'background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--ink)">コピー</button>' +
       '</div>';
+
+    function closeFugoGenModal() {
+      var overlay = document.getElementById('fugo-gen-overlay');
+      if (overlay) overlay.remove();
+      document.removeEventListener('keydown', onFugoGenKeydown);
+    }
+    function onFugoGenKeydown(ev) {
+      if (ev.key === 'Escape') closeFugoGenModal();
+    }
+    function openFugoGenModal(text) {
+      closeFugoGenModal();
+      var overlay = document.createElement('div');
+      overlay.id = 'fugo-gen-overlay';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);' +
+        'z-index:400;display:flex;align-items:center;justify-content:center';
+      overlay.innerHTML =
+        '<div class="fugo-gen-modal" style="background:var(--surface);border:1px solid var(--border);' +
+          'border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.4);width:min(600px,90vw);' +
+          'display:flex;flex-direction:column">' +
+          '<div style="display:flex;align-items:center;justify-content:space-between;' +
+            'padding:8px 12px;border-bottom:1px solid var(--border)">' +
+            '<span style="font-size:12px;font-family:var(--mono);color:var(--ink)">符号の説明</span>' +
+            '<button class="fugo-gen-close" style="font-size:14px;line-height:1;cursor:pointer;' +
+              'background:none;border:none;color:var(--ink3);padding:2px 6px">×</button>' +
+          '</div>' +
+          '<div style="padding:10px 12px">' +
+            '<textarea class="fugo-gen-ta" style="width:100%;box-sizing:border-box;height:240px;' +
+              'font-family:var(--mono);font-size:11px;background:var(--surface2);color:var(--ink);' +
+              'border:1px solid var(--border);border-radius:3px;padding:6px;resize:vertical"></textarea>' +
+            '<button class="fugo-copy-btn" style="margin-top:6px;font-size:10px;padding:2px 10px;cursor:pointer;' +
+              'background:var(--surface2);border:1px solid var(--border);border-radius:3px;color:var(--ink)">コピー</button>' +
+          '</div>' +
+        '</div>';
+      document.body.appendChild(overlay);
+      var ta = overlay.querySelector('.fugo-gen-ta');
+      ta.value = text;
+      ta.select();
+      overlay.addEventListener('click', function(ev) {
+        if (ev.target === overlay) closeFugoGenModal();
+      });
+      overlay.querySelector('.fugo-gen-close').addEventListener('click', closeFugoGenModal);
+      overlay.querySelector('.fugo-copy-btn').addEventListener('click', function() {
+        ta.select();
+        document.execCommand('copy');
+        var btn = overlay.querySelector('.fugo-copy-btn');
+        var orig = btn.textContent;
+        btn.textContent = 'コピー済み';
+        setTimeout(function(){ btn.textContent = orig; }, 1500);
+      });
+      document.addEventListener('keydown', onFugoGenKeydown);
+    }
     function doGenerate() {
       var sortMode = genDiv.querySelector('.fugo-sort-sel').value;
       var text = makeFugoSetsumeisho(ft, sortMode);
-      var area = genDiv.querySelector('.fugo-gen-area');
-      var ta = genDiv.querySelector('.fugo-gen-ta');
-      ta.value = text;
-      area.style.display = 'block';
-      ta.select();
+      openFugoGenModal(text);
     }
     genDiv.querySelector('.fugo-gen-btn').addEventListener('click', doGenerate);
     genDiv.querySelector('.fugo-sort-sel').addEventListener('change', function() {
-      var area = genDiv.querySelector('.fugo-gen-area');
-      if (area.style.display !== 'none') doGenerate();
-    });
-    genDiv.querySelector('.fugo-copy-btn').addEventListener('click', function() {
-      var ta = genDiv.querySelector('.fugo-gen-ta');
-      ta.select();
-      document.execCommand('copy');
-      var btn = genDiv.querySelector('.fugo-copy-btn');
-      var orig = btn.textContent;
-      btn.textContent = 'コピー済み';
-      setTimeout(function(){ btn.textContent = orig; }, 1500);
+      var overlay = document.getElementById('fugo-gen-overlay');
+      if (overlay) doGenerate();
     });
     con.appendChild(genDiv);
   }

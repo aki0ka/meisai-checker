@@ -59,9 +59,14 @@ _KOHO_PAT = re.compile(
     r'|特表|再公表(?:特許)?|韓国公開特許|登録実用新案)'
     r'(?:第|昭|平|令|和)?'
 )
-_KOHO_PART_PAT = re.compile(
-    r'^(?:開|公|報|昭|平|令|和)(?:昭|平|令|和|開|公|報)?'
-)
+# 公報番号トークン分割後に残りうる断片を明示列挙（正規表現の組み合わせ生成だと
+# 「昭和」「令和」「公平」等の実在語まで誤って捕捉してしまうため、実際に
+# 出現しうる形だけを列挙する）
+_KOHO_PART_FRAGMENTS = {
+    '開', '公', '報', '昭', '平', '令',
+    '開昭', '開平', '開令',
+    '公昭', '公平', '公令',
+}
 _KOHO_SUFFIX = {'公報', '号', '号公報', '公開'}
 
 FUGO_EXCLUDE_LIST = {
@@ -89,7 +94,7 @@ def _is_koho_name(name):
 
 def _is_koho_name_part(name):
     """公報番号トークン分割後の残り部分（開昭・開平等）か判定。"""
-    return bool(_KOHO_PART_PAT.match(name)) or name in _KOHO_SUFFIX
+    return name in _KOHO_PART_FRAGMENTS or name in _KOHO_SUFFIX
 
 
 def _is_fugo_exclude_tok(tok):
