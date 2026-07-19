@@ -52,11 +52,48 @@ def _is_katakana_lead(s):
     return bool(s) and ('\u30A0' <= s[0] <= '\u30FF')
 
 
+# 活用のある通常の形容詞（「高い」「大きい」等）の典型的な語尾。
+# これらで終わるトークンは活用形容詞として除外し、要素名への取り込み対象にしない。
+_ADJ_INFLECTION_ENDINGS = ('い', 'く', 'かっ', 'けれ', 'かろ')
+
+
+def _is_bare_adj_stem(t):
+    """活用を伴わない形容詞語幹トークンか判定（例：「凹」「凸」「高」「低」等）。
+
+    MeCab(unidic-lite)は「凹」のような文語形容詞語幹の品詞を、直前の
+    文脈によって形容詞/名詞に揺らして解析することがある（例：「凹溝」の
+    「凹」が文頭では形容詞、「前記凹溝」の後では名詞になる等）。
+    この揺れそのものを追いかけるのではなく、活用のない形容詞語幹は
+    名詞と同様に複合名詞の構成要素として扱うことで吸収する。
+    """
+    return (t['pos'] == '形容詞'
+            and t['surf']
+            and not t['surf'].endswith(_ADJ_INFLECTION_ENDINGS))
+
+
+def _is_name_tok(t):
+    """要素名の構成要素として取り込み可能なトークンか判定。
+
+    _is_noun_tok（名詞・接頭辞・接尾辞の名詞的/形状詞的のみ）よりも広く、
+    以下も許容する:
+      - 接尾辞全般（「者」等の中間的な接尾辞で名詞列の連結を打ち切らないため。
+        符号直前の接尾辞列は既存の連結ロジックで従来通り拾える）
+      - 活用のない形容詞語幹（_is_bare_adj_stem）
+
+    助詞・助動詞・動詞・句読点等は _is_noun_tok 同様に対象外のまま。
+    """
+    if t['pos'] == '接尾辞':
+        return True
+    if _is_bare_adj_stem(t):
+        return True
+    return _is_noun_tok(t)
+
+
 # ── 公報番号パターン ──────────────────────────────────────────
 
 _KOHO_PAT = re.compile(
     r'^(?:特開|特公|特許|特願|実開|実公|実願|国際公開|WO|JP'
-    r'|特表|再公表(?:特許)?|韓国公開特許|登録実用新案)'
+    r'|特表|再公表(?:特許)?|韓国公開特許|登録実用新案|実用新案登録)'
     r'(?:第|昭|平|令|和)?'
 )
 # 公報番号トークン分割後に残りうる断片を明示列挙（正規表現の組み合わせ生成だと
@@ -419,10 +456,9 @@ def _extract_elements_tokens(text):
                 if (t['pos'] == '接頭辞' and t['surf'] == '第'
                         and i+1 < n and _is_fugo_tok(tokens[i+1])):
                     oj = i + 2
-                    while (oj < n and _is_noun_tok(tokens[oj])
+                    while (oj < n and _is_name_tok(tokens[oj])
                            and not _is_fugo_tok(tokens[oj])
-                           and tokens[oj]['surf'] not in _ZENSHOU_WORDS
-                           and tokens[oj]['pos'] != '接尾辞'):
+                           and tokens[oj]['surf'] not in _ZENSHOU_WORDS):
                         oj += 1
                     if oj < n and _is_fugo_tok(tokens[oj]) and oj > i+2:
                         o_name = ''.join(tok['surf'] for tok in tokens[i:oj])
@@ -438,10 +474,9 @@ def _extract_elements_tokens(text):
                 elif (t['surf'] in _ORDINAL_MODS
                         and i+1 < n and tokens[i+1]['surf'] == 'の'):
                     oj = i + 2
-                    while (oj < n and _is_noun_tok(tokens[oj])
+                    while (oj < n and _is_name_tok(tokens[oj])
                            and not _is_fugo_tok(tokens[oj])
-                           and tokens[oj]['surf'] not in _ZENSHOU_WORDS
-                           and tokens[oj]['pos'] != '接尾辞'):
+                           and tokens[oj]['surf'] not in _ZENSHOU_WORDS):
                         oj += 1
                     if oj < n and _is_fugo_tok(tokens[oj]) and oj > i+2:
                         o_core = ''.join(tok['surf'] for tok in tokens[i+2:oj])
@@ -455,7 +490,7 @@ def _extract_elements_tokens(text):
                                 _ordinal_handled = True
 
             # パターン(A): 非fugo名詞列 → 全角数詞
-            if not _ordinal_handled and _is_noun_tok(t) and not _is_fugo_tok(t):
+            if not _ordinal_handled and _is_name_tok(t) and not _is_fugo_tok(t):
                 # 直前が図面符号トークンはスキップ
                 if i > 0 and _is_fugo_tok(tokens[i-1]):
                     i += 1
@@ -504,14 +539,18 @@ def _extract_elements_tokens(text):
                                 _mod_handled = True
                 if _mod_handled:
                     continue
-                # 名詞列収集（_is_fugo_tokで止まる・接尾辞は含まない）
+                # 名詞列収集：_is_name_tok（名詞相当トークン全般。境界は
+                # 助詞・助動詞・動詞・句読点・符号・照応詞・形式名詞のみ）で
+                # 継続する「境界マーカー方式」。品詞タグの許可リストではなく
+                # 何が境界かで判定するため、接尾辞（者等）が名詞列の途中に
+                # 来ても打ち切らず、MeCabが文脈依存で品詞タグを揺らす語
+                # （凹・凸等の活用しない形容詞語幹）にも影響されない。
                 # 形式名詞（とき・ため・うち等）は要素名の核ではないので停止
                 j = i
-                while (j < n and _is_noun_tok(tokens[j])
+                while (j < n and _is_name_tok(tokens[j])
                        and not _is_fugo_tok(tokens[j])
                        and not _is_formal_noun_tok(tokens[j])
-                       and tokens[j]['surf'] not in _ZENSHOU_WORDS
-                       and tokens[j]['pos'] != '接尾辞'):
+                       and tokens[j]['surf'] not in _ZENSHOU_WORDS):
                     # 全角英字1文字 + 直後が全角数字 → 変数記号（Ｖ１等）で停止
                     # 「電圧Ｖ１」の「Ｖ」で止めて「電圧Ｖ」を要素名にしない
                     surf_j = tokens[j]['surf']
@@ -520,20 +559,9 @@ def _extract_elements_tokens(text):
                             and j + 1 < n and _is_fugo_tok(tokens[j + 1])):
                         break
                     j += 1
-
-                # 接尾辞列（部・口・体・器・面・化・帯等）が符号または括弧+符号の直前まで
-                # 続く場合、接尾辞をすべて要素名に取り込む
-                # 例: 吸入口２２１ → 「吸入口」抽出（接尾辞1つ）
-                #     連続厚化帯１０８１ → 「連続厚化帯」抽出（接尾辞3つ）
-                if j < n and tokens[j]['pos'] == '接尾辞':
-                    k = j
-                    while k < n and tokens[k]['pos'] == '接尾辞':
-                        k += 1
-                    _nxt = tokens[k] if k < n else None
-                    _nxt2 = tokens[k + 1] if k + 1 < n else None
-                    if _nxt and (_is_fugo_tok(_nxt) or
-                                 (_nxt['surf'] == '（' and _nxt2 and _is_fugo_tok(_nxt2))):
-                        j = k  # 接尾辞列すべてを要素名に取り込む
+                # 上記ループが _is_name_tok により接尾辞列（部・口・体・器・面・
+                # 化・帯等）も自然に取り込むため、専用の接尾辞連結処理は不要
+                # 例: 吸入口２２１ → 「吸入口」／連続厚化帯１０８１ → 「連続厚化帯」
 
                 # 括弧形式「要素名（符号）」: 全角開き括弧を読み飛ばす
                 # 例: 吸収体（１０８１）→ j が「（」を指している場合にスキップ

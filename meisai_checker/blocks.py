@@ -40,12 +40,19 @@ def build_blocks(text, claims, m3_issues, m4_issues, element_table, ref_hits=Non
             m3_error_nouns.add((iss['claim'], iss['noun']))
 
     # ── 符号の正常/エラーセット構築 ──
-    # fugo_to_names: {符号: [要素名, ...]}
-    fugo_to_names = {}
-    for e in element_table:
-        for f in e['fugos']:
-            fugo_to_names.setdefault(f, set()).add(e['name'])
-    fugo_errors = {f for f, ns in fugo_to_names.items() if len(ns) > 1}
+    # check_fugo が実際に発した「符号Xに複数の要素名が対応しています」エラーから
+    # 符号を抽出する（element_table から独自に再計算すると、check_fugo が持つ
+    # 「一方の/他方の等の序列修飾グループは同一符号でも正常」という例外を
+    # 反映できずGUI側だけ誤って赤くハイライトしてしまうため、判定はCLIと
+    # 同じ check_fugo 本体の結果に一本化する）
+    _FUGO_ERROR_MSG_PAT = re.compile(r'符号「(.+?)」に複数の要素名が対応しています')
+    fugo_errors = set()
+    for iss in m4_issues:
+        if iss.get('level') != 'error':
+            continue
+        m = _FUGO_ERROR_MSG_PAT.search(iss.get('msg', ''))
+        if m:
+            fugo_errors.add(m.group(1))
 
     # ── 初出名詞句マップ構築 ──
     # noun_groupsのref個別first_claimを使い、各請求項が「先行詞として定義」する名詞句を収集
