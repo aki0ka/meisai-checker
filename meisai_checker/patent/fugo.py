@@ -359,6 +359,25 @@ def _collect_fugo_suffix(tokens, start_idx):
     return fugo_parts, j
 
 
+def _collect_var_symbol(tokens, i):
+    """tokens[i] が全角英字1文字トークンであることを前提に、後続の添字
+    （全角数字または半角英数字）を連結して変数記号本体を組み立てる。
+    戻り値: (変数記号文字列, 次のインデックス)
+    """
+    n = len(tokens)
+    var_parts = [tokens[i]['surf']]
+    k = i + 1
+    while k < n:
+        ns = tokens[k]['surf']
+        if (all(_is_zenkaku_digit(c) for c in ns) or
+                (ns.isascii() and ns.replace('_', '').isalnum() and len(ns) <= 4)):
+            var_parts.append(ns)
+            k += 1
+        else:
+            break
+    return ''.join(var_parts), k
+
+
 def _extract_elements_tokens(text):
     """テキストをトークン化し（要素名, 符号, char_offset）ペアを返す。
 
@@ -404,17 +423,7 @@ def _extract_elements_tokens(text):
                     all(_is_zenkaku_digit(c) for c in prev_surf) and len(prev_surf) >= 1)
                 if not prev_is_digit:
                     # 変数記号本体を組み立て（全角英字1文字 + 全角数字 or 半角英数字の連続）
-                    var_parts = [t['surf']]
-                    k = i + 1
-                    while k < n:
-                        ns = tokens[k]['surf']
-                        if (all(_is_zenkaku_digit(c) for c in ns) or
-                                (ns.isascii() and ns.replace('_','').isalnum() and len(ns) <= 4)):
-                            var_parts.append(ns)
-                            k += 1
-                        else:
-                            break
-                    var_sym = ''.join(var_parts)
+                    var_sym, k = _collect_var_symbol(tokens, i)
                     # classify_fugo で変数記号と確認
                     if classify_fugo(var_sym) == 'variable':
                         # 直前の名詞列を物理量名として取得
@@ -458,17 +467,36 @@ def _extract_elements_tokens(text):
                     oj = i + 2
                     while (oj < n and _is_name_tok(tokens[oj])
                            and not _is_fugo_tok(tokens[oj])
-                           and tokens[oj]['surf'] not in _ZENSHOU_WORDS):
+                           and tokens[oj]['surf'] not in _ZENSHOU_WORDS
+                           # 全角英字1文字＋直後が全角数字 → 変数記号側で停止
+                           # （「第１データベースＤ１」の「Ｄ」を名詞側に
+                           # 取り込んでしまい「Ｄ」と「１」が分断されるのを防ぐ）
+                           and not (len(tokens[oj]['surf']) == 1
+                                    and _is_zenkaku_alpha(tokens[oj]['surf'][0])
+                                    and oj + 1 < n and _is_fugo_tok(tokens[oj + 1]))):
                         oj += 1
-                    if oj < n and _is_fugo_tok(tokens[oj]) and oj > i+2:
+                    if oj < n and oj > i+2:
                         o_name = ''.join(tok['surf'] for tok in tokens[i:oj])
                         o_core = ''.join(tok['surf'] for tok in tokens[i+2:oj])
-                        if len(o_core) >= 2:
-                            ofp, oj = _collect_fugo_suffix(tokens, oj)
+                        if _is_fugo_tok(tokens[oj]) and len(o_core) >= 2:
+                            ofp, oj2 = _collect_fugo_suffix(tokens, oj)
                             o_fugo = ''.join(ofp)
                             if classify_fugo(o_fugo) == 'drawing':
                                 drawing_pairs.append((o_name, o_fugo, tokens[i]['start'], o_core, 'ordinal'))
-                                i = oj
+                                i = oj2
+                                _ordinal_handled = True
+                        elif (len(tokens[oj]['surf']) == 1
+                                and _is_zenkaku_alpha(tokens[oj]['surf'][0])
+                                and len(o_core) >= 2):
+                            # 「第１データベースＤ１」型：符号側が変数記号（Ｄ１等）
+                            # 図面符号側の序数ブランチ（上のif節）と同様、_is_fugo_exclude
+                            # は適用しない。「第」がFUGO_EXCLUDE_LISTに含まれるため
+                            # （汎用スキャン向けのルール）、ここで適用すると「第１」を
+                            # 含む名前が一律弾かれてしまう
+                            var_sym, oj2 = _collect_var_symbol(tokens, oj)
+                            if classify_fugo(var_sym) == 'variable':
+                                variable_pairs.append((o_name, var_sym, tokens[i]['start']))
+                                i = oj2
                                 _ordinal_handled = True
                 # 「一方/他方」+ 'の' + 名詞列 + 符号
                 elif (t['surf'] in _ORDINAL_MODS
@@ -476,17 +504,30 @@ def _extract_elements_tokens(text):
                     oj = i + 2
                     while (oj < n and _is_name_tok(tokens[oj])
                            and not _is_fugo_tok(tokens[oj])
-                           and tokens[oj]['surf'] not in _ZENSHOU_WORDS):
+                           and tokens[oj]['surf'] not in _ZENSHOU_WORDS
+                           # 全角英字1文字＋直後が全角数字 → 変数記号側で停止
+                           and not (len(tokens[oj]['surf']) == 1
+                                    and _is_zenkaku_alpha(tokens[oj]['surf'][0])
+                                    and oj + 1 < n and _is_fugo_tok(tokens[oj + 1]))):
                         oj += 1
-                    if oj < n and _is_fugo_tok(tokens[oj]) and oj > i+2:
+                    if oj < n and oj > i+2:
                         o_core = ''.join(tok['surf'] for tok in tokens[i+2:oj])
                         o_name = t['surf'] + 'の' + o_core
-                        if len(o_core) >= 2:
-                            ofp, oj = _collect_fugo_suffix(tokens, oj)
+                        if _is_fugo_tok(tokens[oj]) and len(o_core) >= 2:
+                            ofp, oj2 = _collect_fugo_suffix(tokens, oj)
                             o_fugo = ''.join(ofp)
                             if classify_fugo(o_fugo) == 'drawing':
                                 drawing_pairs.append((o_name, o_fugo, tokens[i]['start'], o_core, 'ordinal'))
-                                i = oj
+                                i = oj2
+                                _ordinal_handled = True
+                        elif (len(tokens[oj]['surf']) == 1
+                                and _is_zenkaku_alpha(tokens[oj]['surf'][0])
+                                and len(o_core) >= 2):
+                            # 「他方のデータベースＤ１」型：符号側が変数記号
+                            var_sym, oj2 = _collect_var_symbol(tokens, oj)
+                            if classify_fugo(var_sym) == 'variable':
+                                variable_pairs.append((o_name, var_sym, tokens[i]['start']))
+                                i = oj2
                                 _ordinal_handled = True
 
             # パターン(A): 非fugo名詞列 → 全角数詞
