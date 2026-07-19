@@ -2,6 +2,15 @@
   "permissions": {
     "additionalDirectories": [
       "/Users/akihisa/projects/meisai_checker/tests/cases"
+    ],
+    "allow": [
+      "Bash(npm run type-check)",
+      "Bash(npm run test:unit)",
+      "mcp__claude-in-chrome__read_console_messages",
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "mcp__claude_ai_Gmail__search_threads",
+      "mcp__claude-in-chrome__get_page_text",
+      "mcp__claude-in-chrome__read_network_requests"
     ]
   }
 }
