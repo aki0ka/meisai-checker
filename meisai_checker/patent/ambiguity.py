@@ -199,8 +199,12 @@ def _check_double_wo(claim_num: int, body: str) -> list[dict]:
     for i, t in enumerate(tokens):
         if t['surf'] == 'を' and t['pos'] == '助詞':
             wo_positions.append(i)
-        elif t['pos'] in ('動詞',) and t.get('cform', '') not in _RENYOU_FORMS:
-            # 動詞の出現で区切る
+        elif t['pos'] in ('動詞', '助動詞') and t.get('cform', '') not in _RENYOU_FORMS:
+            # 動詞・助動詞の出現で区切る。「た」等の助動詞も対象に含めることで、
+            # 「書面を被覆したハウジングを移動する」のように連体形の助動詞
+            # （「た」）で終わる関係節が後続名詞に係る構造を正しく区切りとみなし、
+            # 関係節＋主節（それぞれ独立した目的語を持つ、あいまいさのない構文）
+            # を二重目的語と誤検知しないようにする
             if len(wo_positions) >= 2:
                 # 「を」が2つ以上あり、その間に読点・接続助詞がないか確認
                 for j in range(len(wo_positions) - 1):

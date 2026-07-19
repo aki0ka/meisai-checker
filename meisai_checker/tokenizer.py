@@ -30,8 +30,10 @@ _TOUGAI_WORDS  = {'当該', '該'}
 
 def _tokenize(text):
     """テキストをトークンリストに変換。
-    各トークンは dict: {surf, pos, pos1, pos2, base, start, end}
+    各トークンは dict: {surf, pos, pos1, pos2, base, cform, start, end}
     start/end はテキスト中の文字位置（offset）。
+    cform は活用形（例：連用形-一般・連体形-一般）。動詞が名詞を修飾する
+    連体形（関係節の述語）か、複合名詞を作る連用形かを区別するために使う。
     """
     global _tagger
     result = []
@@ -50,6 +52,7 @@ def _tokenize(text):
             'pos1': g(1),
             'pos2': g(2),
             'base': g(7),
+            'cform': g(5),
             'start': idx,
             'end':   idx + len(surf),
         })
@@ -385,12 +388,37 @@ def _noun_span(tokens, start_idx):
             span.append(t)
             i += 1
         elif (t['pos'] == '動詞' and t['pos1'] == '一般'
-              and span and i + 1 < n and _is_noun_tok(tokens[i + 1])):
+              and span and i + 1 < n and _is_noun_tok(tokens[i + 1])
+              and not t['cform'].startswith('連体形')):
             # 動詞連用形が名詞列に挟まれた複合語（位置決め工程・孔あけ工程等）
+            # 連体形（「当接する背面」の「接する」等）は関係節の述語であり
+            # 複合語ではないため対象外（MeCabが「当接する」を「当」+「接する」
+            # のように未知複合動詞を既知の断片へ分割した際、この動詞ブリッジが
+            # 誤って断片と後続名詞まで一体で先行詞に取り込んでしまうのを防ぐ）
             span.append(t)
             i += 1
         else:
             break
+
+    # 動詞ブリッジが連体形のためブロックされて止まった場合、直前の1トークン
+    # だけの span（「当」「嵌」等）はその動詞（当接する・嵌着する等）が
+    # MeCab未収録の複合動詞であるために生じた断片であり、独立した語として
+    # 実在しない。裸の名詞が助詞なしで連体形動詞に直接隣接する構造は日本語
+    # 文法上「その名詞＋動詞で1語の複合動詞」以外の解釈がないため、
+    # 単独トークンの場合に限り安全に除外できる（2トークン以上の複合語が
+    # たまたま連体形動詞と隣接するケースまでは誤爆を避けるため対象外）。
+    if (span and len(span) == 1 and i < n
+            and tokens[i]['pos'] == '動詞' and tokens[i]['pos1'] == '一般'
+            and tokens[i]['cform'].startswith('連体形')
+            and i + 1 < n and _is_noun_tok(tokens[i + 1])):
+        return []
+
+    # サ変語幹＋「する」で止まった場合、その語幹は独立した先行詞ではなく
+    # 直後の動詞の一部（例：「回転する部材」の「回転」）なので登録しない。
+    # 「回転を検出する」のように直後が助詞なら通常通り名詞として扱われる
+    # （この分岐は「する」に直接ぶつかった場合のみ発火するため無関係）。
+    if span and i < n and tokens[i]['pos'] == '動詞' and tokens[i]['base'] == '為る':
+        return []
 
     # 末尾の「の」は除く
     while span and span[-1]['surf'] == 'の':
