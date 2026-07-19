@@ -313,7 +313,23 @@ def _noun_span(tokens, start_idx):
                 continue
             break
         # 範囲接尾語（以上・以下・未満・超等）は名詞句に含めず停止
+        # ただし span がここまで裸の数量表現（「２」「３個」等）のみの場合は
+        # 範囲接尾語ではなく量化子プレフィックスの一部（「２以上の」）なので、
+        # 「以上」＋「の」を消費して後続の実質名詞へ継続する（「前記２」誤認識対策）。
+        # 「閾値以上の温度」のように span に実質名詞が既に入っている場合は
+        # 従来通り break し「閾値」だけを返す。
         if t['surf'] in _RANGE_SUFFIXES:
+            _is_bare_quant_span = (
+                span and len(span) <= 2 and span[0]['pos1'] == '数詞'
+                and (len(span) == 1
+                     or (span[1]['pos'] == '接尾辞' and span[1]['pos1'] == '名詞的'))
+            )
+            if (_is_bare_quant_span and i + 1 < n and _is_no_tok(tokens[i + 1])
+                    and i + 2 < n and _is_noun_tok(tokens[i + 2])):
+                span.append(t)      # 以上/以下/未満/超 等
+                span.append(tokens[i + 1])  # の
+                i += 2
+                continue
             break
         # 序数修飾中（「第」の後ろ）なら、数詞・名詞を全て連結
         if ordinal_started and (t['pos'] == '数詞' or _is_noun_tok(t)):
