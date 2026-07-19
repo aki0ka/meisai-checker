@@ -392,6 +392,51 @@ def _extract_main_subject(body: str) -> str:
     return _get_segment_head_noun(toks)
 
 
+def _extract_passive_agent_elements(toks: list[dict]) -> list[str]:
+    """「ＮによりＭが被覆された」等、受動態の動作主導入パターンを検出し、
+    動作主Ｎ（内部構成要素の候補）のリストを返す。
+
+    extract_combination_elements が対象とする列挙構文（Ａと、Ｂと、を備える）
+    には現れない構成要素の導入パターンを補足するための補助関数。
+    M2c-Aの内部構成要素除外リストの補強にのみ用いる。
+    """
+    elements: list[str] = []
+    n = len(toks)
+    for i, t in enumerate(toks):
+        # 「に」＋「より」（base: 因る）＝「により」
+        if not (t['pos'] == '助詞' and t['surf'] == 'に'
+                and i + 1 < n and toks[i + 1].get('base') == '因る'):
+            continue
+
+        # 動作主 NP1：「に」の直前まで名詞句を遡って取得
+        j = i - 1
+        while j >= 0 and _is_noun_tok(toks[j]) and not _is_formal_noun_tok(toks[j]):
+            j -= 1
+        span_start = j + 1
+        if span_start >= i:
+            continue
+        np1 = _span_to_str(toks[span_start:i])
+        if len(np1) < 2:
+            continue
+
+        # 「により」以降、次の読点/句点までに「が＋受身助動詞（れる）」があるか確認
+        k = i + 2
+        found_passive = False
+        while k < n and toks[k]['surf'] not in ('。', '、', '，'):
+            if toks[k]['pos'] == '助詞' and toks[k]['surf'] == 'が':
+                m = k + 1
+                while m < n and toks[m]['surf'] not in ('。', '、', '，'):
+                    if toks[m]['pos'] == '助動詞' and toks[m].get('base') == 'れる':
+                        found_passive = True
+                        break
+                    m += 1
+                break
+            k += 1
+        if found_passive:
+            elements.append(np1)
+    return elements
+
+
 def _find_other_device_internals(
     body: str,
     main_subj: str,
@@ -489,6 +534,10 @@ def check_other_device_internals(
             continue
 
         internal_components = extract_combination_elements(body)
+        passive_agents = _extract_passive_agent_elements(_tokenize(body))
+        internal_components = internal_components + [
+            e for e in passive_agents if e not in internal_components
+        ]
         hits = _find_other_device_internals(body, main_subj, internal_components)
 
         for other_device in hits:
