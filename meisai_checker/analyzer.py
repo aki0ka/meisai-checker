@@ -43,7 +43,8 @@ from .patent.anaphora import (  # noqa: F401
     extract_defined_nouns, build_noun_groups, check_pronoun_variants,
 )
 from .patent.fugo import (  # noqa: F401
-    check_fugo, check_fugo_setsumeisho, classify_fugo, FUGO_EXCLUDE_LIST,
+    check_fugo, check_fugo_setsumeisho, check_background_fugo_mention,
+    classify_fugo, FUGO_EXCLUDE_LIST,
     _is_fugo_exclude, _is_fugo_exclude_tok, _is_koho_name, _is_koho_name_part,
     _parse_fugo_setsumeisho, _extract_elements_tokens, _collect_fugo_suffix,
     _offset_to_para_id, _lineno_to_para_id,
@@ -155,7 +156,8 @@ def analyze(text, _skip_blocks=False):
     style_issues = check_pronoun_variants(claims)
     m4_issues, element_table, fugo_table, var_table = check_fugo(claims, sections)
     setsu_issues, setsu_table = check_fugo_setsumeisho(fugo_table, text)
-    m4_issues = m4_issues + setsu_issues
+    bg_fugo_issues = check_background_fugo_mention(sections)
+    m4_issues = m4_issues + setsu_issues + bg_fugo_issues
     # check_jis: sections に加えて生テキストの改ページ等も検出
     _raw_sections = dict(sections)
     _raw_sections['_raw'] = text  # 生テキスト（改ページ等が残っている）

@@ -25,6 +25,17 @@ from ..tokenizer import (
 )
 
 
+# 半角の単位語（数字＋単位は「10V」「5mm」のような正当な数量表現であり、
+# 符号ではない）。_collect_fugo_suffix（全角符号の単位除外）と
+# check_fugo の半角数字符号チェックの両方で共用する。
+_ASCII_UNIT_WORDS = frozenset({
+    'V', 'A', 'W', 'N', 'J', 'F', 'K', 'S', 'T', 'H', 'L', 'C', 'Pa',
+    'mm', 'cm', 'km', 'kg', 'mg', 'ms', 'ns', 'nm', 'Hz', 'kHz', 'MHz', 'GHz',
+    'dB', 'kPa', 'MPa', 'Wb', 'Sv', 'Gy', 'Bq', 'lm', 'lx', 'eV', 'Da',
+    '℃', '°C', '%', '°',
+})
+
+
 # ── 文字種ヘルパー ──────────────────────────────────────────
 
 def _is_zenkaku_digit(c):
@@ -291,6 +302,10 @@ def _collect_fugo_suffix(tokens, start_idx):
     if j < n and tokens[j]['surf'] in _UNIT_AFTER_DIGITS:
         return [], j
 
+    # 半角の単位語が続く場合も数値表現として符号ではない（最低５mm等）
+    if j < n and tokens[j]['surf'] in _ASCII_UNIT_WORDS:
+        return [], j
+
     # カタカナ単位語が続く場合は寸法・数量表現として符号ではない（幅７０ミリメートル等）
     _UNIT_KATAKANA = frozenset({
         'ミリメートル', 'センチメートル', 'メートル', 'キロメートル',
@@ -434,6 +449,12 @@ def _extract_elements_tokens(text):
                             if _is_formal_noun_tok(tokens[j2]):
                                 break  # 形式名詞で区切る
                             surf = tokens[j2]['surf']
+                            if surf in _ZENSHOU_WORDS:
+                                # 照応詞（前記・当該等）はここで区切る
+                                # （「前記ｎ」の「前記」を物理量名に含めない。
+                                # 「前記データ長ｎ」のようにさらに手前へ実質的な
+                                # 名詞列がある場合はそこまでは保持する）
+                                break
                             phys_parts.insert(0, surf)
                             j2 -= 1
                         # 形容詞語幹 + 名詞的接尾辞（深さ・高さ・長さ等）の取り込み
@@ -657,6 +678,14 @@ def _extract_elements_tokens(text):
                             drawing_pairs.append((name, fugo, char_off, core_name, mod_kind))
                         i = j if j > i else i + 1
                         continue
+                    # 除外された場合は名詞列全体をスキップする。1トークンだけ
+                    # 進めて再試行すると、切り詰めた部分文字列が除外パターンを
+                    # すり抜けることがある（例：「実用新案登録第」が公報番号
+                    # として除外された後、「実用」だけ読み飛ばして「新案登録第」
+                    # から再試行すると _is_koho_name が一致しなくなり、公報番号の
+                    # 断片が誤って符号として登録されてしまう）
+                    i = j if j > i else i + 1
+                    continue
 
                 # パターン(B): 名詞列の末尾が全角英字2文字以上 + 直後が全角数詞
                 # fugashiが「ＣＰＵ」を名詞として切り出すケース
@@ -741,22 +770,64 @@ def _is_parallel_numbering(fugos: list[str]) -> bool:
     return bool(tails[0]) and len(set(tails)) == 1
 
 
+def check_background_fugo_mention(sections):
+    """背景技術に「要素名＋符号」形式の符号言及があれば警告する（M4）。
+
+    符号は本願の図面（発明を実施するための形態等）で使用されるものだけを
+    説明するのが正しい使い方であり、背景技術（多くは従来技術・他社文献の
+    図の説明）に現れる符号言及はスタイル上の問題として扱う。本願自身の
+    符号と偶然一致するか否かは問わない（一致していてもいなくても、
+    背景技術に符号要素を書くこと自体が対象）。
+
+    なお「符号は要素名を表す」のような語り口調（「１はハウジング」等）は
+    _extract_elements_tokens が「要素名＋符号」の連結形のみを抽出対象と
+    しているため、そもそもこの関数の対象外（自然に無視される）。
+    """
+    issues = []
+    bg_text = sections.get("background", "")
+    if not bg_text:
+        return issues
+    drawing_pairs, variable_pairs = _extract_elements_tokens(bg_text)
+    seen = set()
+    for row in drawing_pairs:
+        name, fugo, off = row[0], row[1], row[2]
+        key = (name, fugo)
+        if key in seen:
+            continue
+        seen.add(key)
+        issues.append({
+            "milestone": "M4", "level": "warning",
+            "msg": (f"背景技術に符号要素「{name}{fugo}」の記載があります。"
+                    f"符号は本願の図面（発明を実施するための形態等）で"
+                    f"使用されるもののみを説明するのが正しい使い方です。"),
+            "detail": f"offset {off}",
+            "para_ids": [_offset_to_para_id(bg_text, off)],
+        })
+    for phys, vsym, off in variable_pairs:
+        key = (phys, vsym)
+        if key in seen:
+            continue
+        seen.add(key)
+        issues.append({
+            "milestone": "M4", "level": "warning",
+            "msg": (f"背景技術に変数記号「{phys}{vsym}」の記載があります。"
+                    f"符号は本願の図面（発明を実施するための形態等）で"
+                    f"使用されるもののみを説明するのが正しい使い方です。"),
+            "detail": f"offset {off}",
+            "para_ids": [_offset_to_para_id(bg_text, off)],
+        })
+    return issues
+
+
 def check_fugo(claims, sections):
     """符号チェック（図面符号と変数記号）。"""
     issues = []
-    # スコープ: 「発明を実施するための形態」「実施例（N）」のみを抽出
-    # 先行技術文献・発明の効果等は除外し、符号として誤検出しない
+    # スコープ: 「発明を実施するための形態」「実施例（N）」のみを対象とする。
+    # parser.py の SECTION_PATTERNS が背景技術・先行技術文献を独立キーに
+    # 分離しているため、description には実施の形態／実施例Ｎ以外
+    # （技術分野・背景技術・先行技術文献・課題・効果等）が混入しない。
     # drawings（図面の簡単な説明）は符号登録源として含める
-    _raw = sections.get("_raw", "")
-    _IMPL_PAT = re.compile(
-        r'【(?:発明を実施するための(?:最良の)?形態'
-        r'|発明の実施の形態'
-        r'|実施(?:形態)?[０-９0-9]*'
-        r')】(.*?)(?=\n【[^\d】][^】]*】|\Z)',
-        re.DOTALL
-    )
-    _impl_parts = _IMPL_PAT.findall(_raw)
-    desc_text = '\n'.join(_impl_parts) if _impl_parts else sections.get("description", "")
+    desc_text = sections.get("description", "")
     desc_text += sections.get("drawings", "")
     # 【符号の説明】は「符号：要素名　次の符号」形式の連続行で誤ペアが大量発生するため除外
     # （照合は check_fugo_setsumeisho が別途行う）
@@ -869,12 +940,6 @@ def check_fugo(claims, sections):
     # ④ 半角数字の符号（STYLE）
     # 半角数字＋単位（例: 10V, 5mm）は「数量は半角で書く」という規約上正当なので対象外とする。
     # 単位が続かない半角数字（第1・請求項1・収容部10 等）は引き続き警告する。
-    _HALF_UNIT_WORDS = frozenset({
-        'V', 'A', 'W', 'N', 'J', 'F', 'K', 'S', 'T', 'H', 'L', 'C', 'Pa',
-        'mm', 'cm', 'km', 'kg', 'mg', 'ms', 'ns', 'nm', 'Hz', 'kHz', 'MHz', 'GHz',
-        'dB', 'kPa', 'MPa', 'Wb', 'Sv', 'Gy', 'Bq', 'lm', 'lx', 'eV', 'Da',
-        '℃', '°C', '%', '°',
-    })
     seen_half = set()
     for line_no, line in enumerate(desc_text.splitlines(), 1):
         tokens = _tokenize(line)
@@ -882,7 +947,7 @@ def check_fugo(claims, sections):
             if not _is_half_digit(t['surf']) or t['pos1'] != '数詞':
                 continue
             next_surf = tokens[i2 + 1]['surf'] if i2 + 1 < len(tokens) else ''
-            if next_surf in _HALF_UNIT_WORDS:
+            if next_surf in _ASCII_UNIT_WORDS:
                 continue
             j2 = i2 - 1
             name_parts = []
