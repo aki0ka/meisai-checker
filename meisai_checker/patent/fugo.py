@@ -787,20 +787,33 @@ def check_fugo(claims, sections):
         if mod_kind == 'ordinal':
             ordinal_cores.setdefault(core_name, set()).add(name)
 
+    def _is_ordinal_exception(name_map):
+        """符号に対応する複数要素名が「一方のＸ／他方のＸ」型の意図的な
+        型参照（誤記ではない）かどうかを判定する。
+
+        fugo_table の is_dup（GUI符号一覧の色分け元）と、この直後のM4
+        エラー判定の両方から呼ぶことで判定基準を1箇所に統一する
+        （以前は fugo_table.is_dup がこの例外を適用しない素朴な
+        len(name_map) > 1 のままだったため、CLI/analyze()側のM4エラーは
+        出ないのにGUIの符号一覧だけ赤くハイライトされる不整合があった）。
+        """
+        if len(name_map) <= 1:
+            return False
+        cores = {core_name_map.get(n, n) for n in name_map}
+        if len(cores) != 1:
+            return False
+        core = next(iter(cores))
+        return (core in ordinal_cores
+                and all(n in ordinal_cores[core] or n == core
+                        for n in name_map))
+
     # ① 1符号 → 複数要素名（ERROR）
     for fugo, name_map in sorted(fugo_to_names.items()):
         if len(name_map) > 1:
             # 全名称が同一核名詞の序列修飾グループなら正常
             # （一方のＸ／他方のＸが同じ符号に対応するのは意図的な型参照）
-            cores = {core_name_map.get(n, n) for n in name_map}
-            if len(cores) == 1:
-                core = next(iter(cores))
-                # 序列修飾グループ（他方の／一方の等）＋無修飾の素の名前（coreそのもの）が
-                # 同じ符号を共有するのは意図的な型参照なので正常
-                if (core in ordinal_cores
-                        and all(n in ordinal_cores[core] or n == core
-                                for n in name_map)):
-                    continue
+            if _is_ordinal_exception(name_map):
+                continue
             names = list(name_map.keys())
             issues.append({
                 "milestone": "M4", "level": "error",
@@ -929,7 +942,8 @@ def check_fugo(claims, sections):
             "fugo":   fugo,
             "names":  sorted(fugo_to_names[fugo].keys()),
             "count":  fugo_count[fugo],
-            "is_dup": len(fugo_to_names[fugo]) > 1,
+            "is_dup": len(fugo_to_names[fugo]) > 1
+                      and not _is_ordinal_exception(fugo_to_names[fugo]),
         }
         for fugo in sorted(fugo_to_names.keys())
     ]
