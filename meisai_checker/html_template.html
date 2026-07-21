@@ -1239,15 +1239,19 @@ function showM4Para(iss, d) {
 // ══════════════════════════════════════════
 // 符号表タブ
 // ══════════════════════════════════════════
-function makeFugoSetsumeisho(ft, sortMode) {
-  var items = ft.map(function(row) {
+function makeFugoSetsumeisho(ft, vt, sortMode) {
+  var rows = ft.map(function(row) {
+    return { fugo: row.fugo, name: row.names.join('・'), is_dup: row.is_dup };
+  }).concat((vt || []).map(function(row) {
+    return { fugo: row.vsym, name: row.physnames.join('・'), is_dup: row.is_dup };
+  }));
+  var items = rows.map(function(row) {
     var h = row.fugo.replace(/[０-９]/g, function(c){
       return String.fromCharCode(c.charCodeAt(0) - 0xFF10 + 48);
     });
     var num = parseInt(h.replace(/\D/g, ''), 10);
-    var name = row.names.join('・');
     var suffix = row.is_dup ? '　〔要確認〕' : '';
-    return { fugo: row.fugo, num: isNaN(num) ? 99999 : num, line: row.fugo + '…' + name + suffix };
+    return { fugo: row.fugo, num: isNaN(num) ? 99999 : num, line: row.fugo + '…' + row.name + suffix };
   });
   if (sortMode === 'str') {
     items.sort(function(a, b){ return a.fugo.localeCompare(b.fugo); });
@@ -1351,7 +1355,7 @@ function buildFugoTab(con, d) {
   if (vt.length > 0) con.appendChild(varDiv);
 
   // 符号の説明生成セクション（ボタン列のみ。結果はポップアップダイアログで表示）
-  if (ft.length > 0) {
+  if (ft.length > 0 || vt.length > 0) {
     var genDiv = document.createElement('div');
     genDiv.style.cssText = 'flex:0 0 auto;border-top:2px solid var(--border)';
     genDiv.innerHTML =
@@ -1419,7 +1423,7 @@ function buildFugoTab(con, d) {
     }
     function doGenerate() {
       var sortMode = genDiv.querySelector('.fugo-sort-sel').value;
-      var text = makeFugoSetsumeisho(ft, sortMode);
+      var text = makeFugoSetsumeisho(ft, vt, sortMode);
       openFugoGenModal(text);
     }
     genDiv.querySelector('.fugo-gen-btn').addEventListener('click', doGenerate);

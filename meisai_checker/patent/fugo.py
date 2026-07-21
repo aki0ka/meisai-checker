@@ -1038,14 +1038,15 @@ def _parse_fugo_setsumeisho(text):
     body = re.sub(r'【\d{4,5}】', '', text)
 
     # パターン①: 符号…名称（全角三点リーダまたは…）
+    # 符号の先頭は全角数字（図面符号）または全角英字1文字（変数記号、例：Ｍ１）
     for m in re.finditer(
-            r'([\uff10-\uff19][\uff10-\uff19a-zA-Z\uff41-\uff5a\uff21-\uff3a\uff0d]*)'
+            r'([\uff10-\uff19\uff21-\uff3a][\uff10-\uff19a-zA-Z\uff41-\uff5a\uff21-\uff3a\uff0d]*)'
             r'[\u2026\u2025\u30fb\-\uff0d]+'
             r'([^\u3001\uff0c,\r\n\u3010\u3011]{1,30})',
             body):
         fugo = m.group(1).strip()
         name = m.group(2).strip().rstrip('、，,')
-        if fugo and name:
+        if fugo and name and classify_fugo(fugo):
             pairs[fugo] = name
 
     # パターン②③: 符号[スペース/タブ]名称（行単位）
@@ -1053,13 +1054,13 @@ def _parse_fugo_setsumeisho(text):
         for line in body.splitlines():
             line = line.strip()
             m2 = re.match(
-                r'^([０-９０-９][０-９０-９a-zA-Zａ-ｚＡ-Ｚ－]*)'
+                r'^([０-９Ａ-Ｚ][０-９a-zA-Zａ-ｚＡ-Ｚ－]*)'
                 r'[\s　	]+(.+)$',
                 line)
             if m2:
                 fugo = m2.group(1).strip()
                 name = m2.group(2).strip()
-                if fugo and name:
+                if fugo and name and classify_fugo(fugo):
                     pairs[fugo] = name
 
     return pairs
