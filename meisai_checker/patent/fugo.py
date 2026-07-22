@@ -306,6 +306,10 @@ def _collect_fugo_suffix(tokens, start_idx):
     if j < n and tokens[j]['surf'] in _ASCII_UNIT_WORDS:
         return [], j
 
+    # 助数詞が続く場合は数量表現として符号ではない（合計３つ、計５個等）
+    if j < n and tokens[j]['pos'] == '接尾辞' and tokens[j].get('pos2') == '助数詞':
+        return [], j
+
     # カタカナ単位語が続く場合は寸法・数量表現として符号ではない（幅７０ミリメートル等）
     _UNIT_KATAKANA = frozenset({
         'ミリメートル', 'センチメートル', 'メートル', 'キロメートル',
