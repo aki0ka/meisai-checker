@@ -209,6 +209,7 @@ def main():
         height=win_h,
         min_size=(900, 600),
         on_top=on_top,
+        text_select=True,
     )
 
     def on_loaded():
