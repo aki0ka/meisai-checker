@@ -19,6 +19,14 @@ import re
 # 照応詞・よく繰り返される語句
 _ANAPHOR_WORDS = ['前記', '上記', '当該', '該']
 
+# 反復形自体が単一の語として正しい語句（誤検知防止）
+_REDUPLICATED_WORDS_EXCLUDE = {
+    'いろいろ', 'それぞれ', 'もともと', 'だんだん', 'わざわざ',
+    'ときどき', 'たびたび', 'いよいよ', 'すみずみ', 'ところどころ',
+    'いちいち', 'ぼちぼち', 'つぎつぎ', '次々', '徐々', '別々',
+    '着々', '着々と', '刻々', '転々', '点々', '様々', 'さまざま',
+}
+
 # 句読点の連続パターン（全角・半角混在対応）
 _PUNCT_REPEAT_PAT = re.compile(r'([。、，．]{2,}|[,\.]{2,})')
 
@@ -56,11 +64,13 @@ def check_repetition(sections):
     """
     issues = []
 
-    # チェック対象テキストを収集（description + claims）
+    # チェック対象テキストを収集（description + claims + 背景技術等の地の文）
     targets = [
         ("明細書", sections.get("description", "")),
         ("請求項", sections.get("claims", "")),
         ("要約",   sections.get("abstract", "")),
+        ("背景技術等", sections.get("background", "")),
+        ("背景技術等", sections.get("misc_front", "")),
     ]
 
     for section_name, text in targets:
@@ -102,6 +112,9 @@ def check_repetition(sections):
                     continue
                 # 半角英字のみ（括弧内英語 "determining"→"inin" 等の誤検知防止）
                 if re.match(r'^[a-zA-Z]+$', repeated):
+                    continue
+                # 反復形が単一の正しい語句（いろいろ・それぞれ等）
+                if m.group(0) in _REDUPLICATED_WORDS_EXCLUDE:
                     continue
                 issues.append(_iss("info",
                     f"語句が直接繰り返されています：「{m.group(0)}」（{section_name}）",
