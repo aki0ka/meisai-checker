@@ -29,7 +29,7 @@ from .textcheck.charset import (  # noqa: F401
 from .structure.abstract import check_abstract  # noqa: F401
 from .patent.title import check_title  # noqa: F401
 from .structure.sections import (  # noqa: F401
-    check_structure, check_para_nums, check_midashi_numbers,
+    check_structure, check_para_nums, check_empty_paragraphs, check_midashi_numbers,
     _heading_type, _HEADING_TYPE1, _HEADING_TYPE2, _HEADING_TYPE2_NOCHECK,
     _HEADING_TYPE3, _HEADING_TYPE4_PAT, _MEISHO_ITEMS, _NO_PARA_BETWEEN,
 )
@@ -164,13 +164,14 @@ def analyze(text, _skip_blocks=False):
     jis_issues      = check_jis(_raw_sections)
     struct_issues   = check_structure(text)
     para_issues     = check_para_nums(text)
+    empty_para_issues = check_empty_paragraphs(text)
     kuten_issues    = check_kuten(sections)
     abstract_issues = check_abstract(sections)
     midashi_issues  = check_midashi_numbers(sections)
     ref_num_issues  = check_ref_numbers(text)
     fig_issues      = check_figure_notation(sections) + check_figure_consistency(sections)
     m5_issues, title, title_inv_types = check_title(sections, claim_list)
-    m5_issues = struct_issues + para_issues + abstract_issues + midashi_issues + kuten_issues + jis_issues + m5_issues + ref_num_issues + fig_issues
+    m5_issues = struct_issues + para_issues + empty_para_issues + abstract_issues + midashi_issues + kuten_issues + jis_issues + m5_issues + ref_num_issues + fig_issues
     m6_issues, support_table = check_support(claims, sections)
 
     # M7: 明確性要件チェック（係り受け曖昧性・曖昧表現・非技術的事項）

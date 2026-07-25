@@ -3,6 +3,7 @@
 
 - check_structure: 記録項目の存在・順序・段落番号配置
 - check_para_nums: 段落番号の連続性（欠番・重複・逆転）
+- check_empty_paragraphs: 内容のない空段落（見出し直前の空段落等）
 - check_midashi_numbers: 見出しナンバー（１．…等）の順序
 """
 
@@ -283,6 +284,46 @@ def check_para_nums(text):
                 'milestone': 'M5', 'level': 'warning',
                 'msg': f'段落番号に欠番があります：{miss_str}',
                 'detail': f'【{prev:04d}】（行{entries[i-1][0]}）→【{curr:04d}】（行{entries[i][0]}）',
+            })
+
+    return issues
+
+
+def check_empty_paragraphs(text):
+    """段落番号の直後（次の段落番号または見出しまで）に内容がない空段落を検出。"""
+    issues = []
+    lines = text.splitlines()
+
+    _para_pat = re.compile(r'^[　\s]*【(\d{4,5})】\s*(.*)$')
+    _heading_pat = re.compile(r'^[　\s]*【([^】\d０-９][^】]*)】\s*$')
+    # 数式・表・化学式・図・実施例・文献等の番号付きラベルは見出しではなく
+    # 段落の内容そのものなので、見出しマーカーとして扱わない
+    _numbered_label_pat = re.compile(
+        r'^(特許文献|非特許文献|化|数|表|図|実施例)[\d０-９]'
+    )
+
+    # 段落番号・見出しの出現行を通し順に集める
+    markers = []  # (0始まり行番号, 種別, 識別子, 同一行の内容)
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        m = _para_pat.match(stripped)
+        if m:
+            markers.append((i, 'para', m.group(1), m.group(2).strip()))
+            continue
+        m2 = _heading_pat.match(stripped)
+        if m2 and not _numbered_label_pat.match(m2.group(1)):
+            markers.append((i, 'heading', m2.group(1), ''))
+
+    for idx, (lineno, kind, ident, inline_text) in enumerate(markers):
+        if kind != 'para' or inline_text:
+            continue
+        next_lineno = markers[idx+1][0] if idx+1 < len(markers) else len(lines)
+        between = lines[lineno+1:next_lineno]
+        if not any(l.strip() for l in between):
+            issues.append({
+                'milestone': 'M5', 'level': 'warning',
+                'msg': f'段落番号【{ident}】に内容がありません（空段落）',
+                'detail': f'行{lineno+1}',
             })
 
     return issues

@@ -62,7 +62,7 @@ _SECTION_ORDER = [
     '発明の効果',
     '図面の簡単な説明',
     '発明を実施するための形態',
-    # 実施例は番号付きで動的に扱う
+    '実施例',  # 実施例○は normalize() で '実施例' に正規化して扱う
     '産業上の利用可能性',
     '符号の説明',
     '受託番号',
@@ -134,20 +134,19 @@ def _fc1_required(headings: list[tuple[str, int]]) -> list[dict]:
 
 def _fc2_order(headings: list[tuple[str, int]]) -> list[dict]:
     issues = []
-    # 規定順序リスト内の項目だけを取り出し、順序が逆転していないか確認
-    ordered = [h for h, _ in headings if h in _SECTION_ORDER]
     # 実施例○は'実施例'として扱う
     def normalize(h):
         if re.match(r'実施例\d', h):
             return '実施例'
         return h
 
+    # 正規化した上で規定順序リスト内の項目だけを取り出し、順序が逆転していないか確認
+    ordered = [h for h, _ in headings if normalize(h) in _SECTION_ORDER]
+
     prev_idx = -1
     prev_name = ''
     for h in ordered:
         n = normalize(h)
-        if n not in _SECTION_ORDER:
-            continue
         cur_idx = _SECTION_ORDER.index(n)
         if cur_idx < prev_idx:
             issues.append({
