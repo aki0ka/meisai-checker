@@ -14,8 +14,10 @@ JPO出願手続ガイドライン（https://www.pcinfo.jpo.go.jp/guide/DocGuide.
   FC8  【化○】【数○】【表○】が段落番号の外にある検出
   FC9  【実施例】の枝番禁止（【実施例１－１】等）
   FC10 段落番号の配置ルール（項目直下に必要）
-  FC11 段落番号の連続性
   FC12 【発明の名称】直後チェック（書類名の次が名称でなければならない）
+
+段落番号の連続性（欠番・重複・逆転）は M5 (check_para_nums) が担当するため、
+ここでは検査しない（旧FC11は重複のため削除）。
 """
 
 import re
@@ -101,15 +103,6 @@ def _zenkaku_to_hankaku_num(s: str) -> str:
 def _extract_headings(text: str) -> list[tuple[str, int]]:
     """テキストから (見出し名, 開始位置) のリストを返す。"""
     return [(m.group(1), m.start()) for m in _HEADING_PAT.finditer(text)]
-
-
-def _extract_para_nums(text: str) -> list[tuple[int, int]]:
-    """段落番号を (数値, 開始位置) のリストで返す。全角数字も変換。"""
-    result = []
-    for m in _PARA_NUM_PAT.finditer(text):
-        num_str = _zenkaku_to_hankaku_num(m.group(1))
-        result.append((int(num_str), m.start()))
-    return result
 
 
 # ──────────────────────────────────────────────
@@ -389,25 +382,6 @@ def _fc10_para_under_section(text: str, headings: list[tuple[str, int]]) -> list
 
 
 # ──────────────────────────────────────────────
-# FC11: 段落番号の連続性
-# ──────────────────────────────────────────────
-
-def _fc11_para_seq(text: str) -> list[dict]:
-    issues = []
-    para_nums = _extract_para_nums(text)
-    for i in range(1, len(para_nums)):
-        prev_num, _ = para_nums[i-1]
-        cur_num, _ = para_nums[i]
-        if cur_num != prev_num + 1:
-            issues.append({
-                'level': 'error', 'check': 'FC11',
-                'msg': (f"段落番号が連続していません：【{prev_num:04d}】の次が"
-                        f"【{cur_num:04d}】です（【{prev_num+1:04d}】が必要）。")
-            })
-    return issues
-
-
-# ──────────────────────────────────────────────
 # FC12: 【発明の名称】の位置（【書類名】の直後）
 # ──────────────────────────────────────────────
 
@@ -556,7 +530,6 @@ def check_docfields(text: str) -> list[dict[str, Any]]:
         issues += _fc8_block_in_para(meisho_text)
         issues += _fc9_jissirei_branch(meisho_text)
         issues += _fc10_para_under_section(meisho_text, headings)
-        issues += _fc11_para_seq(meisho_text)
         issues += _fc12_name_position(headings)
         return issues
 
@@ -576,6 +549,5 @@ def check_docfields(text: str) -> list[dict[str, Any]]:
     issues += _fc8_block_in_para(text)
     issues += _fc9_jissirei_branch(text)
     issues += _fc10_para_under_section(text, headings)
-    issues += _fc11_para_seq(text)
     issues += _fc12_name_position(headings)
     return issues
