@@ -200,8 +200,11 @@ def _is_fugo_exclude(name, toks=None):
     # 公報番号パターン
     if _is_koho_name(name) or _is_koho_name_part(name):
         return True
-    # 先行技術文献の引用パターン（「米国特許第」「欧州特許第」「同第」等）
-    if name.endswith('特許第') or name.endswith('実用新案第') or name == '同第':
+    # 先行技術文献の引用パターン（「米国特許第」「欧州特許第」「同第」
+    # 「米国特許出願公開第」「欧州特許出願公表第」等）
+    if (name.endswith('特許第') or name.endswith('実用新案第')
+            or name.endswith('出願公開第') or name.endswith('出願公表第')
+            or name == '同第'):
         return True
     # 先頭トークンがリストに含まれる場合（「ステップＳ」→先頭「ステップ」等）
     if toks and toks[0]['surf'] in FUGO_EXCLUDE_LIST:
@@ -1030,16 +1033,64 @@ def check_fugo(claims, sections):
     return issues, element_table, fugo_table, var_table
 
 
+_FUGO_ZENKAKU_DIGITS = re.compile(r'([０-９Ａ-Ｚ]*?)([０-９]+)$')
+
+
+def _expand_fugo_range(start, end, limit=200):
+    """「７０１～７０７」のような符号範囲を個別の符号リストへ展開する。
+    末尾の全角数字部分だけが増分し、それ以外の接頭部分（変数記号のＭ等）が
+    一致している場合のみ展開する。展開できない場合は None を返す。
+    """
+    m1 = _FUGO_ZENKAKU_DIGITS.match(start)
+    m2 = _FUGO_ZENKAKU_DIGITS.match(end)
+    if not m1 or not m2:
+        return None
+    prefix1, digits1 = m1.group(1), m1.group(2)
+    prefix2, digits2 = m2.group(1), m2.group(2)
+    if prefix1 != prefix2 or len(digits1) != len(digits2):
+        return None
+    n1, n2 = int(z2h(digits1)), int(z2h(digits2))
+    if n1 > n2 or (n2 - n1 + 1) > limit:
+        return None
+    width = len(digits1)
+    result = []
+    for n in range(n1, n2 + 1):
+        digits_z = ''.join(chr(ord(c) + 0xFEE0) for c in str(n).zfill(width))
+        result.append(prefix1 + digits_z)
+    return result
+
+
 def _parse_fugo_setsumeisho(text):
     """【符号の説明】セクションのテキストから (符号, 名称) ペアを抽出。
     対応形式:
       ① 符号…名称、符号…名称  （全角三点リーダ区切り）
       ② 符号　名称\n           （タブ/全角スペース区切り・改行）
       ③ 符号 名称\n            （半角スペース区切り）
+      ④ 符号～符号…名称        （範囲指定、全符号に同一名称を対応付け）
     """
     pairs = {}   # {符号: 名称}
     # 段落番号行を除去
     body = re.sub(r'【\d{4,5}】', '', text)
+
+    # パターン④: 符号～符号…名称（範囲指定）
+    for m in re.finditer(
+            r'([０-９Ａ-Ｚ][０-９a-zA-Zａ-ｚＡ-Ｚ－]*)'
+            r'[〜～~]'
+            r'([０-９Ａ-Ｚ][０-９a-zA-Zａ-ｚＡ-Ｚ－]*)'
+            r'[…‥・\-－]+'
+            r'([^、，,\r\n【】]{1,30})',
+            body):
+        fugo_start = m.group(1).strip()
+        fugo_end = m.group(2).strip()
+        name = m.group(3).strip().rstrip('、，,')
+        if not name:
+            continue
+        expanded = _expand_fugo_range(fugo_start, fugo_end)
+        if not expanded:
+            continue
+        for fugo in expanded:
+            if classify_fugo(fugo):
+                pairs[fugo] = name
 
     # パターン①: 符号…名称（全角三点リーダまたは…）
     # 符号の先頭は全角数字（図面符号）または全角英字1文字（変数記号、例：Ｍ１）
