@@ -49,7 +49,8 @@ _LEVEL_ORDER = {'error': 0, 'warning': 1, 'style': 2, 'info': 3, 'ok': 4}
 _MS_LABELS = {
     'm2': 'M2従属関係', 'm3': 'M3照応詞',
     'm4': 'M4符号',    'm5': 'M5誤記',  'm6': 'M6サポート',
-    'm7': 'M7曖昧性',  'm8': 'M8記録項目',
+    'm7': 'M7曖昧性',  'm8': 'M8記録項目', 'm9': 'M9願書記録項目',
+    'tc': 'TC文章形式', 'g1': 'G1文法',
 }
 
 def _filter_issues(issues, level):
@@ -63,7 +64,7 @@ def _make_summary(result):
     """チェック結果からサマリーを生成する"""
     by_ms = {}
     total_error = total_warning = 0
-    for mid in ('m2', 'm3', 'm4', 'm5', 'm6'):
+    for mid in ('m2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'tc', 'g1'):
         issues = result['issues'][mid]
         e = sum(1 for i in issues if i.get('level') == 'error')
         w = sum(1 for i in issues if i.get('level') == 'warning')
@@ -92,7 +93,7 @@ def patent_check_summary(text: str, source_format: str = "auto") -> str:
     Returns:
         summary.has_error - エラーがあれば true
         summary.error_count / warning_count - 件数
-        summary.by_milestone - マイルストーン別集計 (m2-m6)
+        summary.by_milestone - マイルストーン別集計 (m2-m9, tc, g1)
         summary.title - 発明の名称
         summary.total_claims - 請求項数
     """
@@ -116,6 +117,7 @@ def patent_check_issues(text: str, level: str = "error", milestone: str = "all",
         text: 特許明細書のテキスト
         level: "error"（エラーのみ）/ "warning"（警告以上）/ "all"（全件）
         milestone: "all" / "m2"（従属関係）/ "m3"（照応詞）/ "m4"（符号）/ "m5"（誤記）/ "m6"（サポート）
+                   / "m7"（曖昧性）/ "m8"（記録項目）/ "m9"（願書記録項目）/ "tc"（文章形式）/ "g1"（文法）
         source_format: "jplatpat" / "filing" / "auto" (default: auto)
 
     Returns:
@@ -133,9 +135,10 @@ def patent_check_issues(text: str, level: str = "error", milestone: str = "all",
     result = analyze(norm_doc.text, _skip_blocks=True)
     summary = _make_summary(result)
 
+    _ALL_MIDS = ('m2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'tc', 'g1')
     if milestone == 'all':
-        mids = ['m2', 'm3', 'm4', 'm5', 'm6']
-    elif milestone in ('m2', 'm3', 'm4', 'm5', 'm6'):
+        mids = list(_ALL_MIDS)
+    elif milestone in _ALL_MIDS:
         mids = [milestone]
     else:
         return _dump({'error': f'不明なマイルストーン: {milestone}'})
@@ -297,7 +300,7 @@ def patent_check_m8(text: str, source_format: str = "auto") -> str:
             'warning': sum(1 for i in issues if i.get('level') == 'warning'),
         },
         'issues': issues,
-    }, ensure_ascii=False, indent=2)
+    })
 
 
 @mcp.tool()
@@ -335,7 +338,7 @@ def patent_check_m9(text: str) -> str:
             'warning': sum(1 for i in issues if i.get('level') == 'warning'),
         },
         'issues': issues,
-    }, ensure_ascii=False, indent=2)
+    })
 
 
 if __name__ == '__main__':

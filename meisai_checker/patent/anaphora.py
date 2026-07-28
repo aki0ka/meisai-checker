@@ -538,7 +538,7 @@ def check_zenshou(claims, dep_map):
                             bare |= p_bare
                 else:
                     anc_body_toks = {a: claim_body_items[a] for a in ancestors if a in claim_body_items}
-                    bare = _bare_claims_tokenized(noun, anc_body_toks)
+                    bare = _bare_claims_tokenized(noun, anc_body_toks, claim_defined_nouns)
                     if noun in _collect_defined_nouns(tokens[:i]):
                         bare.add(num)
                 if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
@@ -649,6 +649,14 @@ def build_noun_groups(claims, dep_map, ref_hits, m3_issues):
                     idx = pos + 1
         return None
 
+    _tok_cache: dict[int, list] = {}
+    def _get_toks(num):
+        toks = _tok_cache.get(num)
+        if toks is None:
+            toks = _tokenize(claims.get(num, ''))
+            _tok_cache[num] = toks
+        return toks
+
     for noun, g in groups.items():
         # 全refにref個別のfirst_claimを設定する
         # スコープ規則：
@@ -661,10 +669,10 @@ def build_noun_groups(claims, dep_map, ref_hits, m3_issues):
             ancestors = get_all_ancestors(r['claim'], dep_map)
             if r['word'] in ('当該', '該'):
                 # 当該拡張ルール: 同一請求項前方に正常な「前記N」があれば祖先スコープも使用
-                claim_tokens = _tokenize(claims.get(r['claim'], ''))
+                claim_tokens = _get_toks(r['claim'])
                 anc_tokens = []
                 for a in sorted(ancestors):
-                    anc_tokens += _tokenize(claims.get(a, ''))
+                    anc_tokens += _get_toks(a)
                 # 同一請求項の前方トークン列で「前記N」を探す
                 suppressed_first = None
                 for j, tj in enumerate(claim_tokens):

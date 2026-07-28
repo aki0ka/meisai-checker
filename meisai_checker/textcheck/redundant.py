@@ -53,8 +53,7 @@ def check_redundant(sections):
         sections.get("claims", ""),
     ]
 
-    all_patterns = [(p, n) for p, n in _REDUNDANT_FIXED] + \
-                   [(p, n) for p, n in _REDUNDANT_STRUCTURAL]
+    all_patterns = list(_REDUNDANT_FIXED) + list(_REDUNDANT_STRUCTURAL)
 
     for text in targets:
         if not text:
