@@ -724,10 +724,14 @@ def _noun_after_zenshou(tokens, zenshou_idx):
     if (t1['pos1'] == '数詞'
             and j + 1 < n and tokens[j + 1]['surf'] == 'の'):
         k = j + 2
-        # 動詞連用形（ひねり操作の「ひねり」等）を読み飛ばす
+        # 動詞を読み飛ばす。ただし連用形（「ひねり操作」の「ひねり」等、
+        # 複合名詞を形成する形）は記述的修飾ではないため verb_modified の
+        # 根拠にしない。連体形（「ひねる操作」等、関係節として後続名詞を
+        # 修飾する形）のみを真の記述的修飾として扱う。
         _verb_skipped = False
         while k < n and tokens[k]['pos'] == '動詞':
-            _verb_skipped = True
+            if tokens[k]['cform'].startswith('連体形'):
+                _verb_skipped = True
             k += 1
         if k < n and _is_noun_tok(tokens[k]) and not _is_fugo_tok(tokens[k]):
             span_y = _noun_span(tokens, k)
