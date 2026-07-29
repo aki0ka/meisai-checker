@@ -99,6 +99,10 @@ def normalize(text: str, source_format: DocFormat = None) -> NormalizedDoc:
     text, obs_warns = normalize_obsolete_headings(text)
     warnings.extend(obs_warns)
 
+    # 【請求項ｎ】見出し行のメモ・コメント除去（共通）
+    text, comment_warns = strip_claim_header_comments(text)
+    warnings.extend(comment_warns)
+
     return NormalizedDoc(
         text=text,
         detected_format=source_format,
@@ -171,6 +175,32 @@ def normalize_obsolete_headings(text: str) -> tuple[str, list[str]]:
         if pat.search(text):
             text = pat.sub(f'【{new}】', text)
             warnings.append(f"【{old}】を【{new}】に置換しました（旧様式の見出しです）。")
+    return text, warnings
+
+
+# 【請求項ｎ】の直後（空白は無視）に開き括弧（全角/半角）と「※」が
+# 隣接して現れる場合のみメモ・コメントとみなす。現代の出願書式では
+# 見出し直後は改行するのが通例であり、昔ながらのインライン形式
+# （見出しと同じ行に請求項本文を続けて書く）とマーカーなしでは区別
+# できないため、両マーカーの併存を条件にした保守的なヒューリスティック。
+_CLAIM_HEADER_COMMENT_PAT = re.compile(
+    r'(【請求項([０-９0-9]+)】)[ \t　]*(?:[\(（]\s*※|※\s*[\(（])[^\n]*'
+)
+
+
+def strip_claim_header_comments(text: str) -> tuple[str, list[str]]:
+    """【請求項ｎ】と同じ行に書かれたメモ・コメントを除去する。
+
+    Returns:
+        (除去後テキスト, 警告メッセージのリスト)
+    """
+    warnings = []
+
+    def _repl(m):
+        warnings.append(f"請求項{m.group(2)}の見出し行のコメントを除去しました。")
+        return m.group(1)
+
+    text = _CLAIM_HEADER_COMMENT_PAT.sub(_repl, text)
     return text, warnings
 
 
