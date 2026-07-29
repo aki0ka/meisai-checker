@@ -199,6 +199,21 @@ def _plural_intro_warning(num, surf, noun):
     }
 
 
+def _verb_origin_suggestion(num, surf, noun):
+    """「比較することにより」の「比較」のように、サ変語幹＋「する」（事象名詞化）
+    としてのみ登場した語を「前記/上記」で受けた場合の情報レベル提案。
+    """
+    return {
+        'claim': num, 'level': 'info',
+        'word': surf, 'noun': noun,
+        'msg': (f"請求項{num}：「{surf}{noun}」の先行詞「{noun}」は"
+                f"「{noun}することにより」のように動詞の一部としてのみ登場しており、"
+                f"名詞として明示的に導入されていません。"
+                f"「{noun}を行うことにより」等、格助詞を伴う名詞句として"
+                f"導入する書き方への切り替えを検討してください。"),
+    }
+
+
 def check_zenshou(claims, dep_map):
     """前記・上記・当該・該の先行詞チェック（fugashiトークンベース）。
 
@@ -375,7 +390,7 @@ def check_zenshou(claims, dep_map):
             else:
                 # 前記・上記
                 # まず同一請求項の前方で見つかれば常にOK
-                _prefix_found, _bridge_src = _found_in_scope_ex(noun, prefix)
+                _prefix_found, _bridge_src, _verb_origin = _found_in_scope_ex(noun, prefix)
                 if _prefix_found:
                     if _bridge_src:
                         issues.append({
@@ -396,6 +411,9 @@ def check_zenshou(claims, dep_map):
                                     f"「{noun}」に固有の名称を与える書き方への切り替えを検討してください。"),
                         })
                     else:
+                        if _verb_origin and (num, noun, 'verb_origin') not in _uniqueness_seen:
+                            _uniqueness_seen.add((num, noun, 'verb_origin'))
+                            issues.append(_verb_origin_suggestion(num, t['surf'], noun))
                         if len(direct_parents) > 1:
                             # 多項従属: 各親スコープで独立して唯一性を評価。
                             # 「請求項1又は2に記載の〜」は一方を選べば必ず一意なので、
@@ -423,7 +441,7 @@ def check_zenshou(claims, dep_map):
                     continue
                 if len(direct_parents) <= 1:
                     # 単項従属または独立：全祖先を結合してチェック
-                    found, _bridge_src = _found_in_scope_ex(noun, ancestor_tokens)
+                    found, _bridge_src, _verb_origin = _found_in_scope_ex(noun, ancestor_tokens)
                 else:
                     # 多項従属：いずれか一つの直接親のスコープで見つかれば良い
                     # 「請求項1又は2に記載の〜」は一方が適用されるので、
@@ -434,6 +452,7 @@ def check_zenshou(claims, dep_map):
                     ]
                     found = any(r[0] for r in _parent_results)
                     _bridge_src = next((r[1] for r in _parent_results if r[1]), None)
+                    _verb_origin = next((r[2] for r in _parent_results if r[0]), False)
 
             if not found:
                 suppressed = False
@@ -525,6 +544,9 @@ def check_zenshou(claims, dep_map):
                                 f"括弧書きを省いた「{_PAREN_PAT.sub('', _bridge_src)}」で"
                                 f"先に導入することを推奨します。"),
                     })
+                if _verb_origin and (num, noun, 'verb_origin') not in _uniqueness_seen:
+                    _uniqueness_seen.add((num, noun, 'verb_origin'))
+                    issues.append(_verb_origin_suggestion(num, t['surf'], noun))
                 if len(direct_parents) > 1:
                     # 多項従属: 各親スコープで独立して唯一性を評価。
                     # 「請求項3又は4に記載の〜」は一方を選べば必ず一意なので、

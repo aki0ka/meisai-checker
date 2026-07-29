@@ -236,6 +236,21 @@
       ],
       "in_impl": true,
       "noun": "計測部"
+    },
+    {
+      "claims": [
+        3,
+        6
+      ],
+      "in_impl": true,
+      "noun": "透過"
+    },
+    {
+      "claims": [
+        1
+      ],
+      "in_impl": true,
+      "noun": "除去"
     }
   ]
 ]

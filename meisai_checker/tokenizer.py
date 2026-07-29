@@ -413,12 +413,17 @@ def _noun_span(tokens, start_idx):
             and i + 1 < n and _is_noun_tok(tokens[i + 1])):
         return []
 
-    # サ変語幹＋「する」で止まった場合、その語幹は独立した先行詞ではなく
-    # 直後の動詞の一部（例：「回転する部材」の「回転」）なので登録しない。
-    # 「回転を検出する」のように直後が助詞なら通常通り名詞として扱われる
-    # （この分岐は「する」に直接ぶつかった場合のみ発火するため無関係）。
+    # サ変語幹＋「する」で止まった場合の扱い:
+    #   直後（するの次）が実質名詞なら、その語幹は独立した先行詞ではなく
+    #   直後の動詞の一部（例：「回転する部材」の「回転」）なので登録しない。
+    #   直後が形式名詞（こと・ため等）・文末・句読点なら、するは
+    #   「〜することにより」のように事象を名詞化して継続させる用法であり、
+    #   語幹（比較等）は事象名詞として先行詞になりうるため登録する
+    #   （動詞由来先行詞として _collect_defined_nouns 側でマーキングする）。
     if span and i < n and tokens[i]['pos'] == '動詞' and tokens[i]['base'] == '為る':
-        return []
+        _after = tokens[i + 1] if i + 1 < n else None
+        if not (_after is None or _is_formal_noun_tok(_after) or _after['pos'] == '補助記号'):
+            return []
 
     # 末尾の「の」は除く
     while span and span[-1]['surf'] == 'の':
@@ -536,10 +541,13 @@ class Occurrence:
     position: トークン列内のインデックス（span 先頭）
     modifier: 直前の修飾節テキスト — Phase 2 で埋める
     is_new_dr: 産出動詞付きなら True（処理記述の裸名詞を除外用）— Phase 3 で埋める
+    verb_origin: サ変語幹＋「する」（事象名詞化）由来の登録なら True
+                 （例：「比較することにより」の「比較」）
     """
     position: int
     modifier: str | None = None
     is_new_dr: bool | None = None
+    verb_origin: bool = False
 
 
 def _collect_defined_nouns(tokens) -> dict[str, list['Occurrence']]:
@@ -588,7 +596,16 @@ def _collect_defined_nouns(tokens) -> dict[str, list['Occurrence']]:
                        or _is_counter_expr
                        or (len(span) == 1 and _is_formal_noun_tok(span[0])))
             if not is_skip:
-                nouns.setdefault(s, []).append(Occurrence(position=i))
+                # サ変語幹＋「する」（事象名詞化）由来の登録かどうかを記録する。
+                # 例：「比較することにより」の「比較」→ _noun_span が形式名詞
+                # 続きを許容して登録したケース（_noun_span 参照）。
+                _j = i + len(span)
+                _verb_origin = (
+                    _j < n and tokens[_j]['pos'] == '動詞'
+                    and tokens[_j]['base'] == '為る'
+                )
+                nouns.setdefault(s, []).append(
+                    Occurrence(position=i, verb_origin=_verb_origin))
                 # パターンC: 末尾トークンが数詞（符号番号）の場合
                 # 「収容部２０」→「収容部」もベース名詞として登録
                 if (len(span) >= 2 and span[-1]['pos1'] == '数詞'):
@@ -829,8 +846,10 @@ def _spell_out_bridge(noun, scope_tokens):
 def _found_in_scope_ex(noun, scope_tokens):
     """noun が scope_tokens 内の先行詞候補に一致するか判定。
 
-    戻り値: (found: bool, bridge_original: str | None)
+    戻り値: (found: bool, bridge_original: str | None, verb_origin_only: bool)
     bridge_original が非Noneの場合、スペルアウト括弧書き省略によるブリッジマッチを示す。
+    verb_origin_only は、noun のスコープ内の登場が全てサ変語幹＋「する」由来
+    （例：「比較することにより」の「比較」）である場合に True。
 
     例外1: UniDicが「部内」等を複合名詞化するケース → 末尾位置接尾辞を除去して再検索。
     例外2: スペルアウトブリッジ（「ＧＮＳＳ受信機」←「ＧＮＳＳ（…）受信機」）。
@@ -849,14 +868,16 @@ def _found_in_scope_ex(noun, scope_tokens):
     """
     defined = _collect_defined_nouns(scope_tokens)
     if noun in defined:
-        return True, None
+        occs = defined[noun]
+        return True, None, bool(occs) and all(o.verb_origin for o in occs)
     if noun and noun[-1] in _LOC_SUFFIXES_BOUNDARY and len(noun) > 2:
         # 末尾の位置接尾辞を除去して再検索（例：「蓋部内」→「蓋部」）
         # MeCabが「部内」を複合名詞化するケース（蓋部内/収容部内等）でも対応するため
         # 再トークナイズ検証は行わず、base が定義済みかどうかだけで判定する
         base = noun[:-1]
         if len(base) >= 2 and base in defined:
-            return True, None
+            occs = defined[base]
+            return True, None, bool(occs) and all(o.verb_origin for o in occs)
     # 例外3: 限定詞+核名詞で再検索（「分岐画像」→「所定の分岐画像」）
     # 「所定の分岐画像」で定義されている場合、「前記分岐画像」で照応できるようにする
     # ただし同一性変更限定詞（他・別）は除外：「他のX」≠「X」なので「前記X」では照応不可
@@ -865,7 +886,7 @@ def _found_in_scope_ex(noun, scope_tokens):
             continue
         with_limiter = limiter + 'の' + noun
         if with_limiter in defined:
-            return True, None
+            return True, None, False
     # 例外4: 数量修飾「Nつの」「N個の」等+核名詞で導入された場合の核名詞単独照応
     # 「１つのセンサ」で導入 → 「前記センサ」で照応するパターンを許容
     # （「少なくとも」を伴う場合は既存の先行詞が核名詞で登録されるため対象外）
@@ -881,12 +902,12 @@ def _found_in_scope_ex(noun, scope_tokens):
                     and prefix_toks[0]['pos1'] == '数詞'
                     and prefix_toks[1]['pos'] == '接尾辞'
                     and prefix_toks[1]['pos1'] == '名詞的')):
-            return True, None
+            return True, None, False
     # スペルアウトブリッジフォールバック
     bridge = _spell_out_bridge(noun, scope_tokens)
     if bridge:
-        return True, bridge
-    return False, None
+        return True, bridge, False
+    return False, None, False
 
 
 def _found_in_scope(noun, scope_tokens):
@@ -907,5 +928,5 @@ def _found_in_scope(noun, scope_tokens):
     例外3: スペルアウトブリッジ（_found_in_scope_ex 参照）。
     ブリッジ情報が不要な呼び出し元向けのシム。
     """
-    found, _ = _found_in_scope_ex(noun, scope_tokens)
+    found, _, _ = _found_in_scope_ex(noun, scope_tokens)
     return found
