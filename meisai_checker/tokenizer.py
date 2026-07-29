@@ -725,13 +725,20 @@ def _noun_after_zenshou(tokens, zenshou_idx):
             and j + 1 < n and tokens[j + 1]['surf'] == 'の'):
         k = j + 2
         # 動詞連用形（ひねり操作の「ひねり」等）を読み飛ばす
+        _verb_skipped = False
         while k < n and tokens[k]['pos'] == '動詞':
+            _verb_skipped = True
             k += 1
         if k < n and _is_noun_tok(tokens[k]) and not _is_fugo_tok(tokens[k]):
             span_y = _noun_span(tokens, k)
             y = _span_to_str(span_y)
             if len(y) >= 2:
-                return y, span_y[0]['start'], span_y[-1]['end']
+                if _verb_skipped:
+                    return y, span_y[0]['start'], span_y[-1]['end']
+                # 「一の」のように動詞を伴わない裸の量化子は記述的修飾では
+                # ないため、noun_start を「一」の開始位置（zenshou直後）に
+                # して verb_modified（記述照応詞）判定を誤発火させない。
+                return y, tokens[j]['start'], span_y[-1]['end']
 
     # 形状詞修飾パターン
     # 弁別基準: 助動詞「な（だ連体形）」の有無
