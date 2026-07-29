@@ -543,11 +543,20 @@ class Occurrence:
     is_new_dr: 産出動詞付きなら True（処理記述の裸名詞を除外用）— Phase 3 で埋める
     verb_origin: サ変語幹＋「する」（事象名詞化）由来の登録なら True
                  （例：「比較することにより」の「比較」）
+    distributive: 「各N」「Nのそれぞれ」等、実際に分配（各要素ごとの束縛変数）が
+                  確立された登場なら True。「複数のN」「全てのN」等は分配を伴わない
+                  単なる群導入であり、それぞれ／各々等の分配マーカーが
+                  伴わない限り False のまま（例：「複数のNを取得する」）。
     """
     position: int
     modifier: str | None = None
     is_new_dr: bool | None = None
     verb_origin: bool = False
+    distributive: bool = False
+
+
+# 「Nのそれぞれ」「Nの各々」等、Nに後続して分配を明示するマーカー
+_DISTRIBUTIVE_SUFFIX_WORDS = {'それぞれ', '各々', 'おのおの'}
 
 
 def _collect_defined_nouns(tokens) -> dict[str, list['Occurrence']]:
@@ -569,7 +578,19 @@ def _collect_defined_nouns(tokens) -> dict[str, list['Occurrence']]:
         # 照応詞の直後は参照語なのでスキップ
         if t['surf'] in _ZENSHOU_WORDS:
             skip_span = _noun_span(tokens, i + 1)
-            i += 1 + (len(skip_span) if skip_span else 0)
+            _consumed = 1 + (len(skip_span) if skip_span else 0)
+            # 「前記複数のＸのそれぞれ」「当該Ｘの各々」等、参照側で分配マーカーが
+            # 続く場合は、参照先（skip_span の名詞句）に分配フラグを遡って記録する。
+            # 分配の宣言自体は「前記/当該」で既出のNを再度取り上げた際に起きる
+            # ことが多く、定義側の登録タイミングでは検出できないため。
+            if skip_span:
+                _k = i + 1 + len(skip_span)
+                if (_k + 1 < n and tokens[_k]['surf'] == 'の'
+                        and tokens[_k + 1]['surf'] in _DISTRIBUTIVE_SUFFIX_WORDS):
+                    _ref_key = _span_to_str(skip_span)
+                    nouns.setdefault(_ref_key, []).append(
+                        Occurrence(position=i + 1, distributive=True))
+            i += _consumed
             continue
         _is_kata_keijo = (t['pos'] == '形状詞' and t['surf']
                           and all('゠' <= c <= 'ヿ' for c in t['surf']))
@@ -604,8 +625,18 @@ def _collect_defined_nouns(tokens) -> dict[str, list['Occurrence']]:
                     _j < n and tokens[_j]['pos'] == '動詞'
                     and tokens[_j]['base'] == '為る'
                 )
+                # 分配マーカーの検出：
+                #   前置型「各N」「それぞれのN」→ span 自体が分配を明示済み
+                #   後置型「Nのそれぞれ」「Nの各々」→ span 直後の の＋それぞれ等
+                _distributive = (
+                    (span and span[0]['surf'] == '各')
+                    or s.startswith('それぞれの')
+                    or (_j + 1 < n and tokens[_j]['surf'] == 'の'
+                        and tokens[_j + 1]['surf'] in _DISTRIBUTIVE_SUFFIX_WORDS)
+                )
                 nouns.setdefault(s, []).append(
-                    Occurrence(position=i, verb_origin=_verb_origin))
+                    Occurrence(position=i, verb_origin=_verb_origin,
+                               distributive=_distributive))
                 # パターンC: 末尾トークンが数詞（符号番号）の場合
                 # 「収容部２０」→「収容部」もベース名詞として登録
                 if (len(span) >= 2 and span[-1]['pos1'] == '数詞'):
@@ -881,8 +912,12 @@ def _found_in_scope_ex(noun, scope_tokens):
     # 例外3: 限定詞+核名詞で再検索（「分岐画像」→「所定の分岐画像」）
     # 「所定の分岐画像」で定義されている場合、「前記分岐画像」で照応できるようにする
     # ただし同一性変更限定詞（他・別）は除外：「他のX」≠「X」なので「前記X」では照応不可
+    # 量化子系限定詞（各・複数・それぞれ等）も除外：カーディナリティを持つため
+    # 「複数のN」と導入されたなら「前記複数のN」で照応するのが正しい形であり、
+    # 剥ぎ取って裸のNで照応させると束縛変数のカーディナリティ整合性チェックを
+    # 迂回してしまう（上記docstring「量化子の剥ぎ取りは行わない」の趣旨通り）。
     for limiter in sorted(_LIMITERS, key=len, reverse=True):
-        if limiter in _ORDINAL_MODS:
+        if limiter in _ORDINAL_MODS or limiter in _QUANT_MODS:
             continue
         with_limiter = limiter + 'の' + noun
         if with_limiter in defined:

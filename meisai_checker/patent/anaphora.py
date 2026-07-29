@@ -381,10 +381,16 @@ def check_zenshou(claims, dep_map):
                 # 当該・該：同一請求項の前方のみ
                 found = _found_in_scope(noun, prefix)
                 if not found:
-                    # ② 束縛変数回収: 「各N」「複数のN」等の分配スコープ内で
-                    # 「当該N」が量化変数を受け取るパターンは正常（出力なし）
+                    # ② 束縛変数回収: 「各N」「Nのそれぞれ」等、実際に分配
+                    # （各要素ごとの束縛変数）が確立された先行詞がある場合のみ
+                    # 「当該N」の束縛変数受け取りを許容する。「複数のN」のように
+                    # 分配マーカー（各／それぞれ等）を伴わず群として導入された
+                    # だけの場合は対象外（分配文脈がなければ「当該N」がどの
+                    # 個体を指すか定まらないため。E-type照応の成立条件）。
+                    _defined_prefix = _collect_defined_nouns(prefix)
                     for _qpfx, _ in _LEADING_QUANT_PREFIXES:
-                        if _found_in_scope(_qpfx + noun, prefix):
+                        _occs = _defined_prefix.get(_qpfx + noun)
+                        if _occs and any(o.distributive for o in _occs):
                             found = True
                             break
             else:
