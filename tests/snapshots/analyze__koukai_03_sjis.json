@@ -283,6 +283,13 @@
       },
       {
         "claim": 1,
+        "level": "info",
+        "msg": "請求項1：「前記光学ノイズがそれぞれ除去された前記第１検出部」の「前記第１検出部」は既に先行詞が一意です。この修飾節が新しい技術的事実の追加であれば問題ありませんが、先行詞の絞り込みを意図したものであれば機能していない可能性があります。",
+        "noun": "第１検出部",
+        "word": "前記"
+      },
+      {
+        "claim": 1,
         "level": "warning",
         "milestone": "M6",
         "missing_nouns": [
@@ -508,6 +515,13 @@
     ],
     "m2b": [],
     "m3": [
+      {
+        "claim": 1,
+        "level": "info",
+        "msg": "請求項1：「前記光学ノイズがそれぞれ除去された前記第１検出部」の「前記第１検出部」は既に先行詞が一意です。この修飾節が新しい技術的事実の追加であれば問題ありませんが、先行詞の絞り込みを意図したものであれば機能していない可能性があります。",
+        "noun": "第１検出部",
+        "word": "前記"
+      },
       {
         "claim": 3,
         "level": "warning",
@@ -950,7 +964,7 @@
           "first_claim": 1,
           "pos": 295,
           "uniqueness_warning": false,
-          "verb_modified": false,
+          "verb_modified": true,
           "word": "前記"
         },
         {
@@ -959,7 +973,7 @@
           "first_claim": 1,
           "pos": 388,
           "uniqueness_warning": false,
-          "verb_modified": false,
+          "verb_modified": true,
           "word": "前記"
         }
       ]

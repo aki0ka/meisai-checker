@@ -214,6 +214,56 @@ def _verb_origin_suggestion(num, surf, noun):
     }
 
 
+def _redundant_modifier_clause_start(tokens, zenshou_idx):
+    """「前記Aが〜した前記B」のような後付け修飾節を検出する。
+
+    「前記B」の直前が連体形の完了節（〜た/だ）で終わっており、かつその節の
+    主語が別の前記/当該Aである場合、節の開始トークン位置を返す。該当なければ None。
+
+    理論的背景：前記/当該は先行詞を封印する（唯一の個体を選択済み）ため、
+    その後に付ける修飾節は本来の絞り込み機能を果たさない。
+    """
+    i = zenshou_idx
+    if i == 0:
+        return None
+    prev = tokens[i - 1]
+    if not (prev['cform'].startswith('連体形') and prev['surf'].endswith(('た', 'だ'))):
+        return None
+
+    # 節の開始位置を、直前の句読点まで遡って探す（見つからなければ請求項冒頭）
+    clause_start = 0
+    for k in range(i - 2, -1, -1):
+        if tokens[k]['pos'] == '補助記号':
+            clause_start = k + 1
+            break
+
+    # 節内に「前記/当該+名詞+が」という主語パターンがあるか探す
+    for j in range(clause_start, i - 1):
+        if tokens[j]['surf'] not in _ZENSHOU_WORDS:
+            continue
+        _, _a_start, a_end = _noun_after_zenshou(tokens, j)
+        if not _a_start:
+            continue
+        k2 = j + 1
+        while k2 < i - 1 and tokens[k2]['end'] < a_end:
+            k2 += 1
+        if (k2 < i - 1 and tokens[k2]['end'] == a_end
+                and k2 + 1 <= i - 2
+                and tokens[k2 + 1]['surf'] == 'が' and tokens[k2 + 1]['pos'] == '助詞'):
+            return j
+    return None
+
+
+def _redundant_modifier_warning(num, surf, noun, mod_text):
+    return {
+        'claim': num, 'level': 'info',
+        'word': surf, 'noun': noun,
+        'msg': (f"請求項{num}：「{mod_text}{surf}{noun}」の「{surf}{noun}」は既に先行詞が一意です。"
+                f"この修飾節が新しい技術的事実の追加であれば問題ありませんが、"
+                f"先行詞の絞り込みを意図したものであれば機能していない可能性があります。"),
+    }
+
+
 def check_zenshou(claims, dep_map):
     """前記・上記・当該・該の先行詞チェック（fugashiトークンベース）。
 
@@ -444,6 +494,12 @@ def check_zenshou(claims, dep_map):
                                 and (num, noun) not in _plural_intro_seen):
                             _plural_intro_seen.add((num, noun))
                             issues.append(_plural_intro_warning(num, t['surf'], noun))
+                        # 後付け修飾節：先行詞が既に一意なのに「前記Aが〜した前記B」で修飾している
+                        if len(direct_parents) <= 1 and len(bare) <= 1:
+                            _mod_start = _redundant_modifier_clause_start(tokens, i)
+                            if _mod_start is not None:
+                                mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
+                                issues.append(_redundant_modifier_warning(num, t['surf'], noun, mod_text))
                     continue
                 if len(direct_parents) <= 1:
                     # 単項従属または独立：全祖先を結合してチェック
@@ -577,6 +633,12 @@ def check_zenshou(claims, dep_map):
                         and (num, noun) not in _plural_intro_seen):
                     _plural_intro_seen.add((num, noun))
                     issues.append(_plural_intro_warning(num, t['surf'], noun))
+                # 後付け修飾節：先行詞が既に一意なのに「前記Aが〜した前記B」で修飾している
+                if len(direct_parents) <= 1 and len(bare) <= 1:
+                    _mod_start = _redundant_modifier_clause_start(tokens, i)
+                    if _mod_start is not None:
+                        mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
+                        issues.append(_redundant_modifier_warning(num, t['surf'], noun, mod_text))
     return issues
 
 
