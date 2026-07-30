@@ -1,315 +1,263 @@
-# meisai-checker コードレビューレポート
+# meisai-checker バグ検出レポート（実行検証版）
 
-**対象リビジョン**: 2026-07-27 時点の `main` ブランチ  
-**調査範囲**: `meisai_checker/` 配下の全 Python ファイル、`mcp_server.py`、`tests/`
+**対象**: `main` @ `2d8d718`（2026-07-30 時点のワーキングツリー）
+**検証環境**: Python 3.10 / fugashi + unidic-lite / `pytest tests/ -q` → **120 passed**
+**方法**: 静的レビューで挙げた候補を実際に import・実行して真偽を確定させた。以下はすべて**再現コード付きで確認済み**。
 
----
-
-## 高（致命的バグ）
-
-### H-1 `mcp_server.py` 300行・338行 — `_dump()` に余分な引数 → TypeError
-
-**場所**: `meisai_checker/mcp_server.py` 300行、338行
-
-`_dump()` は `obj` を 1 引数だけ受け取る関数として定義されている（32〜36行）。
-
-```python
-# 定義（32〜36行）
-try:
-    from pytoony import json2toon
-    def _dump(obj):
-        return json2toon(json.dumps(obj, ensure_ascii=False))
-except ImportError:
-    def _dump(obj):
-        return json.dumps(obj, ensure_ascii=False, indent=2)
-```
-
-しかし `patent_check_m8`（300行）と `patent_check_m9`（338行）は 3 引数で呼んでいる。
-
-```python
-# 300行（patent_check_m8）
-return _dump({...}, ensure_ascii=False, indent=2)   # TypeError
-
-# 338行（patent_check_m9）
-return _dump({...}, ensure_ascii=False, indent=2)   # TypeError
-```
-
-`pytoony` 導入済み環境では `json2toon` ベースの `_dump` が選ばれ、未導入環境では `json.dumps` ベースが選ばれるが、**どちらも 1 引数のみ**なので、両ツールは呼び出されるたびに必ず TypeError で落ちる。
-
-**修正提案**: 余分な `ensure_ascii=False, indent=2` を削除する。
+> **前バージョンからの訂正**: 初版レポートは `mcp_server.py` の古いスナップショットに基づいており、`_dump()` の TypeError と `_make_summary()` の集計漏れを「高/中」として報告していた。現行ツリーでは**いずれも既に修正済み**で存在しない。詳細は末尾の「撤回した指摘」を参照。
 
 ---
 
-### H-2 `meisai_checker/patent/anaphora.py` 130行 — `pos1` フィールドの誤用
+## 高
 
-**場所**: `meisai_checker/patent/anaphora.py` 130行
+### B-1 `anaphora.py:130` — `pos1` 誤用により M3「前文の照応詞」警告が完全に死んでいる
+
+**場所**: `meisai_checker/patent/anaphora.py:130`（`_extract_final_noun`）
 
 ```python
 if t['pos1'] == '名詞' and len(t['surf']) >= 2:
 ```
 
-`_tokenize()` が返すトークン dict において `pos` が品詞のトップレベル（名詞／動詞等）、`pos1`〜`pos3` は下位分類（細分類）にあたる。unidic-lite では `pos1` に入るのは「普通名詞」「固有名詞」などの細分類であり、`pos1 == '名詞'` は**常に False**になる。この関数は名詞の末尾を見つけることができず、常に `None` を返す。
+unidic-lite では `pos` が品詞トップレベル（名詞/動詞/…）、`pos1` が細分類（普通名詞/数詞/…）。つまり **`pos1 == '名詞'` は決して成立しない**。
 
-**修正提案**: `t['pos1']` → `t['pos']` に変更する。
+```
+$ _tokenize('前記基板の電極部材')
+  前記 pos=名詞 pos1=普通名詞
+  基板 pos=名詞 pos1=普通名詞
+  部材 pos=名詞 pos1=普通名詞    ← pos1 は '普通名詞'、'名詞' ではない
+```
+
+**実測**
+
+| 入力 | 現状 (`pos1`) | 修正後 (`pos`) |
+|------|--------------|---------------|
+| `前記基板の電極部材` | `None` | `'部材'` |
+| `複数の素子を備える半導体装置` | `None` | `'装置'` |
+| `基板と、電極とを備える装置` | `None` | `'装置'` |
+
+**下流影響**: 276行 `final_noun = _extract_final_noun(tokens)` が常に `None` → 281行 `if m_pre and final_noun:` が常に False → `is_preamble` が永久に False → **293〜305行の「前文（「であって/において」以前）に照応詞があります」警告は一度も発火しない**。
+
+実証（1行修正するだけで警告が復活する）:
+
+```
+入力: 前記筐体に収容された基板を備える電子装置であって、前記基板は制御部を有し、…、電子装置。
+  現状  : 警告なし
+  修正後: 「請求項1：前文（「であって/において」以前）に照応詞があります。…」
+```
+
+**修正**: `t['pos1']` → `t['pos']`。
+
+> なお 65 件のスナップショットはこのバグを含んだ状態で採取されているため、修正時は `--update-snapshots` でのベースライン再作成が必要。
 
 ---
 
-### H-3 `meisai_checker/analyzer.py` 178〜220行 — 広範な例外抑制
+### B-2 `fugo.py:1107` — 混在形式の【符号の説明】でエントリが黙って欠落する
 
-**場所**: `meisai_checker/analyzer.py` 178行、191行、198行、216行
+**場所**: `meisai_checker/patent/fugo.py:1107`（`_parse_fugo_setsumeisho`）
 
-M7・M8・M9・G1 の各チェックブロックが `except Exception: issues = []` で全例外を握りつぶしている。
+```python
+    # パターン②③: 符号[スペース/タブ]名称（行単位）
+    if not pairs:          # ← パターン①で1件でも取れると②③を一切試さない
+```
+
+パターン①（`１０…制御部`）で 1 件でもヒットすると、残りの行がパターン②（`２０　　記憶部`）形式でも**まったく解析されない**。
+
+**実測**
+
+```python
+mixed = "【符号の説明】\n【００５０】\n  １０…制御部\n  ２０　　記憶部\n  ３０　　通信部\n"
+only2 = "【符号の説明】\n【００５０】\n  １０　　制御部\n  ２０　　記憶部\n"
+
+_parse_fugo_setsumeisho(mixed) → {'１０': '制御部'}                    ← ２０・３０ が消失
+_parse_fugo_setsumeisho(only2) → {'１０': '制御部', '２０': '記憶部'}   ← ②単独なら正常
+```
+
+**影響**: 手書き・複数人編集の明細書では「…」区切りとスペース区切りが混在しやすい。欠落した符号は M4 で「符号の説明に記載がありません」という**偽陽性エラー**として大量に出る。
+
+**修正**: `if not pairs:` を削除し、①④と②③を常に両方走らせて結果をマージする（既存キーは①優先で上書きしない）。
+
+---
+
+### B-3 `analyzer.py:187/194/201/219` — M7・M8・M9・G1 の例外を完全に握りつぶす
+
+**場所**: `meisai_checker/analyzer.py` 187, 194, 201, 219 行
 
 ```python
 try:
     from .patent.ambiguity import check_ambiguity
     m7_issues = check_ambiguity(claims) + ...
-except Exception:       # ← ImportError・AttributeError・TypeError 等を全て無視
+except Exception:      # ImportError だけでなく実装バグも全部飲み込む
     m7_issues = []
 ```
 
-MeCab 障害・実装バグ・設定ミスなど実際のエラーが完全に隠蔽され、チェック結果がゼロ件として返るため、デバッグが極めて困難になる。
+**実証**（`check_ambiguity` に `RuntimeError` を注入）
 
-**修正提案**: `except Exception` を `except ImportError` に絞るか、少なくとも `logging.exception()` でエラーを記録する。本番でも例外を握りつぶすなら、その意図をコメントで明示する。
-
----
-
-### H-4 `meisai_checker/tokenizer.py` 20行 — インポート時の MeCab 初期化失敗
-
-**場所**: `meisai_checker/tokenizer.py` 20行前後
-
-```python
-_tagger = fugashi.GenericTagger(...)   # モジュールトップレベル
+```
+正常時     m7 件数: 0
+例外注入時 m7 件数: 0    ← 例外は一切表面化せず、ログにも出ない
 ```
 
-MeCab / unidic-lite が未インストールの環境でこのモジュールを `import` するだけで RuntimeError が送出される。tokenizer は analyzer.py から無条件にインポートされるため、**パッケージ全体がロード不能**になる。
+チェックが「0 件」なのか「壊れて動いていない」のか呼び出し側から**原理的に区別できない**。B-1 のような論理バグや MeCab 障害が本番で永久に発覚しない構造になっている。
 
-**修正提案**: `_tagger` の初期化を遅延（`_get_tagger()` のような関数に包んで初回呼び出し時に生成）するか、モジュールレベルを `try/except` で保護して `_tagger = None` にフォールバックし、実際のトークナイズ時に ImportError を再送出する。
+**修正**: `except ImportError` に絞る。それ以外を握りつぶす必要があるなら最低限 `logging.exception()` を入れ、戻り値に劣化フラグを立てる。
 
 ---
 
-## 中（動作に影響するバグ・設計問題）
+## 中
 
-### M-1 `meisai_checker/mcp_server.py` 66行 — `_make_summary()` が m7〜g1 を集計しない
+### B-4 `particles.py:164` — `形容動詞` は unidic に存在しない品詞名（判定が死んでいる）
 
-**場所**: `meisai_checker/mcp_server.py` 66行
+**場所**: `meisai_checker/grammar/particles.py:164`
 
 ```python
-for mid in ('m2', 'm3', 'm4', 'm5', 'm6'):   # m7/m8/m9/tc/g1 が漏れている
+return p in ("名詞", "代名詞", "接頭辞", "形容動詞")
 ```
 
-`patent_check_summary` の返却値 `summary.error_count` / `warning_count` には m7・m8・m9・tc・g1 のカウントが含まれない。また `patent_check_issues` の `milestone` パラメータも `m2`〜`m6` しか受け付けない（138行）。導入された M7〜G1 チェックが MCP 経由では事実上参照できない。
+unidic-lite の形容動詞語幹の品詞は **`形状詞`**。`形容動詞` は旧品詞体系の名称で、トークンに現れない。
 
-**修正提案**: `for mid in ('m2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'tc', 'g1')` に拡張し、`_MS_LABELS` と `milestone` のバリデーションも合わせて更新する。
+**実測**
+
+| 語 | 実際の `pos` | `_is_noun_like` |
+|----|-------------|-----------------|
+| これ | `代名詞` | `True` ✅ |
+| 静か | `形状詞` | `False` ❌ |
+| 綺麗 | `形状詞` | `False` ❌ |
+
+docstring は「名詞・**代名詞・形容動詞語幹**など」と明記しているので、形状詞を拾えないのは実装漏れ。G1 の「の」連鎖チェックが形容動詞語幹をまたぐケースを取りこぼす。
+
+**修正**: `"形容動詞"` → `"形状詞"`。（`代名詞` は unidic でトップレベル品詞として実在するので、こちらは正しい。初版レポートで誤りとしたのは撤回。）
 
 ---
 
-### M-2 `meisai_checker/patent/anaphora.py` 541行 — キャッシュ引数の渡し忘れ
+### B-5 `tokenizer.py:338` — `pos` と `pos1` の取り違え（現状は OR に救われている）
 
-**場所**: `meisai_checker/patent/anaphora.py` 541行（前後の文脈と要照合）
-
-412行では `_bare_claims_tokenized(noun, anc_body_toks, claim_defined_nouns=cache)` とキャッシュを渡しているが、別の呼び出しパスの 541行では `_bare_claims_tokenized(noun, anc_body_toks)` とキャッシュを渡していない。結果として同一請求項のトークナイズが重複して走り、パフォーマンスが劣化する。
-
-**修正提案**: 541行の呼び出しに `precomputed_defined=cache` を追加する。
-
----
-
-### M-3 `meisai_checker/patent/anaphora.py` `build_noun_groups()` 内 — 重複トークナイズ
-
-**場所**: `meisai_checker/patent/anaphora.py` `build_noun_groups()` 関数内のネストループ
+**場所**: `meisai_checker/tokenizer.py:338`
 
 ```python
-for r in ref_hits:
-    ...
-    _tokenize(claims.get(r['claim'], ''))   # 同じ claim_num が複数 ref_hit に現れるたびに再実行
+if ordinal_started and (t['pos'] == '数詞' or _is_noun_tok(t)):
 ```
 
-`ref_hits` の中で同一請求項番号が複数出現するたびに `_tokenize()` が走る。`_tokenize()` は MeCab を呼ぶため、請求項数×前記出現数のスケールで無駄なコストが生じる。
+コードベース中で `数詞` を参照する箇所は 16 か所あり、**この 1 か所を除く 15 か所すべてが `pos1` を見ている**（`support.py:78`, `fugo.py:358/373/455/954/961`, `tokenizer.py:193/231/326/381/611/642/654/724/946`）。実際 `数詞` は `pos1` の値であり、`t['pos'] == '数詞'` は常に False。
 
-**修正提案**: `{claim_num: tokens}` の辞書をループ前に一度作成してキャッシュする。
+**実測**
+
+```
+第一の電極 →  一  pos=名詞  pos1=数詞   _is_noun_tok=True
+pos=='数詞' となるトークン: 存在しない
+```
+
+現時点では OR 右辺の `_is_noun_tok(t)` が数詞トークン（`pos == '名詞'`）を拾うため**実害は出ていない**。ただし `_is_noun_tok` の条件を将来絞り込むと即座に「第一の〜」の序数スパン抽出が壊れる潜在バグ。
+
+**修正**: `t['pos1'] == '数詞'` に統一する。
 
 ---
 
-### M-4 `meisai_checker/patent/fugo.py` 714行 — `list.index()` による誤トークン参照
+### B-6 `support.py:268` — `verb[:-1]` の語幹切り出しが破綻し、用例が無意味になる
 
-**場所**: `meisai_checker/patent/fugo.py` 714行前後
+**場所**: `meisai_checker/patent/support.py:268`
 
 ```python
-tokens.index(last_tok, i)
+clause = _find_clause(body, verb[:-1])  # 活用語尾を除いて検索
 ```
 
-`list.index()` は **等値比較（`==`）** で検索するため、同じ表層形・品詞を持つ別のトークンオブジェクトを誤って指すことがある。特に「の」「を」「は」等の高頻度語が繰り返す文では誤マッチが起きやすい。
+末尾 1 文字を落とすだけの近似のため、語幹が 1 文字以下になる動詞で破綻する。
 
-**修正提案**: オブジェクト同一性（`is`）で探す `next(j for j, t in enumerate(tokens[i:], i) if t is last_tok)` に置き換えるか、インデックスを直接追跡する設計に変更する。
+**実測**（body = `基板を有する装置であって、前記基板を加熱する加熱部を備える装置。`）
+
+| verb | stem | 得られる用例 | 評価 |
+|------|------|------------|------|
+| `加熱する` | `加熱す` | `前記基板を加熱する加熱部を備える装置。` | OK |
+| `有する` | `有す` | `基板を有する装置であって、` | OK |
+| `なる` | `な` | **`な`** | 無意味 |
+| `する` | `す` | **`基板を有する装置であって、`** | 無関係な節を誤提示 |
+
+検出そのものには影響せず、issue メッセージ中の「用例：」が壊れるだけだが、ユーザーが修正箇所を誤認する。
+
+**修正**: `_tokenize()` の `base`（原形）フィールドから語幹を取るか、用例が 2 文字未満なら「用例：」自体を省く。
 
 ---
 
-### M-5 `meisai_checker/patent/fugo.py` 1108行 — パターン選択ロジックの漏れ
+### B-7 `sections.py:341-342` — 文字クラスの範囲重複 ＋ 半角数字が拾えない
 
-**場所**: `meisai_checker/patent/fugo.py` `_parse_fugo_setsumeisho()` 関数内
+**場所**: `meisai_checker/structure/sections.py` 341, 342 行
 
 ```python
-if not pairs:
-    # Pattern②③ を試みる
+level1_pat = re.compile(r'^[　\s]*([１-９１-９][０-９０-９]*)[\．.]')
+level2_pat = re.compile(r'^[　\s]*（([１-９１-９][０-９０-９]*)）')
 ```
 
-Pattern①④ で何も取れなかった場合のみ Pattern②③ を試みる排他的な構造になっており、①と②が混在する書き方（例：一部は「符号　要素名」形式、別の箇所は「要素名（符号）」形式）を処理できない。
+コードポイントを確認すると `[１-９１-９]` は **U+FF11–U+FF19 の範囲が 2 回**、`[０-９０-９]` も同様。純粋な重複記述。
 
-**修正提案**: `if not pairs:` による排他を廃止し、両パターンを常に試みて結果をマージする。あるいは段落ごとにパターンを独立して適用する。
+```
+文字クラス中身: [('１',0xff11), ('-',0x2d), ('９',0xff19), ('１',0xff11), ('-',0x2d), ('９',0xff19)]
+全角'３' match: True   半角'3' match: False
+```
+
+半角数字を意図して 2 個目を書いたなら**半角側が全角のまま書かれた誤記**で、`1.` `(2)` のような半角見出し番号が検出できない。
+
+**修正**: 半角も対象なら `[0-9０-９]`、全角のみでよければ `[１-９]` に整理する。
 
 ---
 
-### M-6 `meisai_checker/patent/support.py` 268行 — 動詞ステム除去の脆弱性
+## 低
 
-**場所**: `meisai_checker/patent/support.py` 268行前後
+### B-8 `tokenizer.py:20` — MeCab 初期化がモジュールトップレベル
+
+`_tagger = fugashi.GenericTagger(...)` がインポート時に走るため、MeCab/unidic-lite 未導入環境では `import meisai_checker.analyzer` した時点で例外。B-3 の `except Exception` と組み合わさると「全チェックが 0 件で正常終了したように見える」状態になりうる。遅延初期化（`_get_tagger()`）を推奨。
+
+### B-9 `verbose.py:50-52` — `\w` が日本語にマッチし、助詞を巻き込む
 
 ```python
-_find_clause(body, verb[:-1])   # 最後の1文字を削除してステムとする
+(re.compile(r'\w{1,8}を行う'), ...)
 ```
 
-「する → す」「ある → あ」のような単音節語幹や「とする → する」では有効だが、「なる → な」「要する → 要す」など語幹境界が 1 文字除去と一致しない動詞では誤った切り捨てになる。形態素解析の `lemma`（原形）フィールドを使うほうが正確。
+Python の `\w` は Unicode 対応なので漢字・かなにマッチする。実測: `所定の処理を行う` → マッチ全体が `所定の処理を行う`（「の」を含む 8 文字を貪欲に遡る）、`これを行う` → `これを行う`（指示語も対象化）。検出は成立するが、issue の `detail` に不自然な範囲が出る。文字範囲を明示するか `[^\s、。]{1,8}` に置換を推奨。
 
-**修正提案**: `_tokenize()` で動詞を検出し、`t['lemma']` から語幹を取得する。
+### B-10 `tokenizer.py:38` — 無意味な `global _tagger`
 
----
+`_tokenize()` 内の `global _tagger` は同スコープで代入がなく無効（pyflakes 検出）。削除可。
 
-### M-7 `meisai_checker/grammar/particles.py` 162行 — 品詞名の誤り
+### B-11 未使用ローカル変数（pyflakes）
 
-**場所**: `meisai_checker/grammar/particles.py` `_is_noun_like()` 関数（162行前後）
+- `anaphora.py:783` — `context` に代入後、未使用
+- `ambiguity.py:161` / `subcombination.py:238` — `n` に代入後、未使用
+- `cli.py:348,358`, `style.py:92`, `charset.py:39`, `kuten.py:72` — プレースホルダのない f-string
 
-```python
-if t['pos'] in ('名詞', '代名詞', '形容動詞', ...):
-```
+### B-12 テストのカバレッジ
 
-unidic-lite では「代名詞」は `名詞` の下位分類（`pos1 == '代名詞'`）であり、トップレベルの `pos` として現れない。「形容動詞」も同様で、unidic では `形状詞` が正しい品詞名。結果として代名詞・形容動詞を名詞類として扱う分岐が**実質的に機能しない**。
+- スナップショットは `.txt` 入力のみ。`file_reader.py` の `.docx` / `.pdf` 経路は 120 テスト中ゼロ。
+- `tests/fixtures/` が gitignore のため、CI ではスナップショット比較が成立しない。
 
-**修正提案**: `pos` と `pos1` の両方を確認するか、unidic-lite の実際の品詞体系（`pos == '名詞' and pos1 == '代名詞'`、`pos == '形状詞'`）に合わせてラベルを修正する。
-
----
-
-### M-8 `meisai_checker/structure/sections.py` — `check_midashi_numbers()` の重複正規表現範囲
-
-**場所**: `meisai_checker/structure/sections.py` `check_midashi_numbers()` 内（341行前後）
-
-```python
-re.compile(r'[１-９１-９]')   # 全角範囲が2回重複している
-```
-
-文字クラス `[１-９１-９]` は `１-９` の範囲を 2 つ含んでいる。機能的な誤動作は起きないが、半角 `1-9` か全角 `１-９` か、片方のみ意図しているなら誤記である。
-
-**修正提案**: 意図に応じて `[０-９]`（全角のみ）か `[0-90-9]`（半角＋全角）か `[0-9０-９]` に修正する。
+**堅牢性は良好**: 空文字・空白のみ・番号なし請求項・9桁の請求項番号・句点なし・NUL 文字・絵文字の 9 パターンで `analyze()` を実行したが、**クラッシュはゼロ**。
 
 ---
 
-### M-9 `meisai_checker/patent/clarity.py` 317行 — `AttributeError` の可能性
+## 撤回した指摘（初版レポートの誤り）
 
-**場所**: `meisai_checker/patent/clarity.py` 317行
+初版は `mcp_server.py` の古い版に基づいており、また一部は実行検証で偽陽性と判明した。
 
-```python
-verb = (m_stem or m_wago).group(0)  # type: ignore[union-attr]
-```
-
-`_has_change_verb()` が True を返した場合でも、内部の正規表現マッチが `m_stem` も `m_wago` も `None` になるケースが実装上ありえるなら AttributeError が発生する。analyzer.py 側の `except Exception` で握りつぶされるためエラーが表面化しないが、M7 チェック全体が無効化される。
-
-**修正提案**: `(m_stem or m_wago)` の前に明示的な None チェックを追加するか、`_has_change_verb()` の返却値を `re.Match | None` にして呼び出し側で統一的に処理する。
-
----
-
-## 低（コード品質・軽微な問題）
-
-### L-1 `meisai_checker/tokenizer.py` — `text.find()` による offset の誤算
-
-**場所**: `meisai_checker/tokenizer.py` `_tokenize()` 内
-
-```python
-pos = text.find(surf, pos)
-```
-
-同一表層形（例：「の」「を」「する」）が直前のトークンよりも前に出現している場合、`find(surf, pos)` は期待したトークンよりも前の出現を指してしまうことがある。これによりハイライト表示やオフセットベースの照合がずれる。
-
-**修正提案**: fugashi の `pos_id` や文字列スライスでオフセットを計算するか、`text.find(surf, pos)` の結果が前回トークン終端より小さい場合を検出して再検索するガードを追加する。
+| 初版ID | 内容 | 検証結果 |
+|--------|------|---------|
+| H-1 | `_dump()` に余分な引数 → TypeError | **現行ツリーに存在しない**。`ensure_ascii` は 33/36 行の定義部のみ。8 か所の呼び出しはすべて 1 引数 |
+| M-1 | `_make_summary()` が m7〜g1 を集計しない | **修正済み**。現行は `('m2'…'m6','m7','m8','m9','tc','g1')` の 10 件すべてを集計。`patent_check_issues` も `_ALL_MIDS` で全対応 |
+| M-2 | `_bare_claims_tokenized` にキャッシュ未渡し | **偽陽性**。431/436/564/569 の全 4 か所が `claim_defined_nouns` を渡している |
+| M-3 | `build_noun_groups` で重複トークナイズ | **偽陽性**。681〜687 行に `_tok_cache` / `_get_toks()` が実装済み |
+| M-4 | `fugo.py:714` の `list.index()` が誤トークンを指す | **偽陽性**。トークン dict は一意な `start` オフセットを持つため `==` で衝突しない（実測：重複トークンなし） |
+| L-3 | `redundant.py` の冗長なリスト内包表記 | **修正済み**。現行は `list(_REDUNDANT_FIXED) + list(_REDUNDANT_STRUCTURAL)` |
+| L-1 | `text.find()` による offset 破損 | **再現せず**。全角英数・連続全角空白・記号混在で検証したが offset 不一致は発生しなかった。理論上の `idx < 0` フォールバック経路は残る |
 
 ---
 
-### L-2 `meisai_checker/patent/subcombination.py` 649行前後 — ループ内の正規表現コンパイル
+## 優先度サマリー
 
-**場所**: `meisai_checker/patent/subcombination.py` 649行前後
+| ID | 場所 | 影響 | 工数 |
+|----|------|------|------|
+| **B-1** | `anaphora.py:130` | M3 警告が 1 つ完全に不発 | 1 文字（＋スナップショット再採取） |
+| **B-2** | `fugo.py:1107` | M4 に偽陽性エラーが大量発生 | 数行 |
+| **B-3** | `analyzer.py:187/194/201/219` | 全バグが本番で不可視化 | 数行 |
+| B-4 | `particles.py:164` | G1 が形状詞を取りこぼす | 1 語 |
+| B-5 | `tokenizer.py:338` | 潜在バグ（現状は無害） | 1 語 |
+| B-6 | `support.py:268` | M6 の用例表示が壊れる | 数行 |
+| B-7 | `sections.py:341-342` | 半角見出し番号の見逃し | 1 行 |
 
-ループの中で `re.compile(...)` を呼んでいる箇所がある。正規表現コンパイルはコストが高く、モジュール定数にすべき。
-
-**修正提案**: ループの外（モジュールレベル）に `_CLAIM_LIMIT_RE = re.compile(...)` として移動する。
-
----
-
-### L-3 `meisai_checker/textcheck/redundant.py` 56〜58行 — 冗長なリスト内包表記
-
-**場所**: `meisai_checker/textcheck/redundant.py` 56〜58行
-
-```python
-pairs = [(p, n) for p, n in _REDUNDANT_FIXED]   # list(_REDUNDANT_FIXED) と同等
-```
-
-アンパックして再パックしているだけで意味がない。
-
-**修正提案**: `pairs = list(_REDUNDANT_FIXED)` に単純化する。
-
----
-
-### L-4 `meisai_checker/textcheck/redundant.py` 59〜128行 — 段落ループの重複
-
-**場所**: `meisai_checker/textcheck/redundant.py` 59〜93行（固定表現チェック）、96〜128行（数値範囲チェック）
-
-ほぼ同一構造の「段落ごとのイテレーションとパラグラフ ID 取得」ロジックが 2 か所に存在する。
-
-**修正提案**: 共通のジェネレータ関数（例：`_iter_paragraphs(sections)`）に切り出し、2 つのループから呼ぶ。
-
----
-
-### L-5 `meisai_checker/textcheck/verbose.py` 51行 — `\w` が日本語にマッチする
-
-**場所**: `meisai_checker/textcheck/verbose.py` 51行
-
-```python
-re.compile(r'\w{1,8}を行う')
-```
-
-Python の `re` では `\w` は Unicode 対応のため、漢字・かな・カタカナにもマッチする。日本語の「処理を行う」「制御を行う」等がヒットする一方、「ABCDEFGHを行う」等の英字が混じった表現も検出する。意図的かどうか不明。
-
-**修正提案**: 意図が「動詞 + を行う」の冗長表現検出であれば `[぀-鿿]{1,8}を行う` のように文字範囲を明示するか、`\w` の意図をコメントで明記する。
-
----
-
-### L-6 `meisai_checker/blocks.py` 224行前後 — オフセットと実テキストのズレ
-
-**場所**: `meisai_checker/blocks.py` `_highlight_para()` 224行前後
-
-```python
-if text[offset:offset+len(key)] != key:
-    ...
-```
-
-`key = name + fugo` で構成されるが、`name` に序数修飾子（「第一」「上記」等）を含む場合に `core_name` と異なることがあり、offset 位置の文字列と `key` が一致しないケースが生じる。ハイライトのスキップや位置ずれを引き起こす。
-
-**修正提案**: オフセット計算に使うキーを `core_name + fugo` に統一するか、`text.find(key, offset-5)` のように許容誤差を持たせる。
-
----
-
-### L-7 `tests/` — テストカバレッジの偏り
-
-**場所**: `tests/test_snapshot_analyze.py`
-
-スナップショットテストは `.txt` 入力のみを対象としており、`file_reader.py` の `.docx` / `.pdf` 読み込みパスはテストされていない。また `tests/fixtures/` が `.gitignore` 管理のため、CI 環境ではフィクスチャが存在せず `test_fixtures_present()` が失敗する（CI では常にスキップまたはエラーになる）。
-
-**修正提案**: `.docx` / `.pdf` の最小サンプルをリポジトリに含めるか、`pytest.skip` で明示的に CI をスキップする。また `tests/fixtures/` をバイナリファイルとして Git LFS 管理に移行することも検討する。
-
----
-
-## まとめ
-
-| 深刻度 | 件数 | 主な内容 |
-|--------|------|----------|
-| 高     | 4    | TypeError（H-1）、品詞フィールド誤り（H-2）、例外全握りつぶし（H-3）、MeCab 初期化失敗（H-4） |
-| 中     | 9    | サマリー集計漏れ（M-1）、キャッシュ渡し漏れ（M-2）、重複トークナイズ（M-3）、index() 誤参照（M-4）、パターン排他ロジック（M-5）、他 |
-| 低     | 7    | 正規表現の重複・範囲問題、冗長コード、テストカバレッジ不足 など |
-
-**即対応が必要なもの**: H-1（MCP ツール 2 本が完全に機能しない）、H-2（前記チェックの照応詞末尾検出が全滅）、H-3（M7〜G1 のバグが本番で完全に無視される）。
+**まず直すなら B-1 → B-3 → B-2**。B-1 は 1 文字修正で死んでいた警告が復活し、B-3 を直さない限り同種のバグが今後も発覚しない。
