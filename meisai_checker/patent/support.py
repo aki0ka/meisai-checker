@@ -265,7 +265,10 @@ def check_support(claims, sections):
             if len(missing_nouns) > 12:
                 lines.append(f"  …他{len(missing_nouns) - 12}件")
             for verb in missing_verbs[:6]:
-                clause = _find_clause(body, verb[:-1])  # 活用語尾を除いて検索
+                stem = verb[:-1]  # 活用語尾を除いて検索
+                if len(stem) < 2:  # 「する」「なる」等、語幹が1文字以下になる場合は原形のまま検索
+                    stem = verb
+                clause = _find_clause(body, stem)
                 lines.append(f"  ・「{verb}」〔動詞〕（用例：「{clause}」）")
             if len(missing_verbs) > 6:
                 lines.append(f"  …他{len(missing_verbs) - 6}件（動詞）")

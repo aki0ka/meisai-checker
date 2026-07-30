@@ -4,6 +4,7 @@
 各種チェック関数と分析ロジックを集約
 """
 
+import logging
 import re
 from collections import defaultdict, Counter
 
@@ -184,21 +185,30 @@ def analyze(text, _skip_blocks=False):
             + check_nontechnical(claims)
             + check_relative_expression(claims, kinds, sections)
         )
+    except ImportError:
+        m7_issues = []
     except Exception:
+        logging.exception("M7チェックで例外が発生しました")
         m7_issues = []
 
     # M8: 記録項目チェック（遅延インポートで依存を分離）
     try:
         from .structure.docfields import check_docfields
         m8_issues = check_docfields(text)
+    except ImportError:
+        m8_issues = []
     except Exception:
+        logging.exception("M8チェックで例外が発生しました")
         m8_issues = []
 
     # M9: 願書記録項目チェック（【書類名】特許願が含まれる場合のみ）
     try:
         from .structure.gansho import check_gansho
         m9_issues = check_gansho(text)
+    except ImportError:
+        m9_issues = []
     except Exception:
+        logging.exception("M9チェックで例外が発生しました")
         m9_issues = []
 
     # TC: 文章形式チェック（Layer 2: MeCab不要、正規表現のみ）
@@ -216,7 +226,10 @@ def analyze(text, _skip_blocks=False):
     try:
         from .grammar.particles import check_particles
         g1_issues = check_particles(sections)
+    except ImportError:
+        g1_issues = []
     except Exception:
+        logging.exception("G1チェックで例外が発生しました")
         g1_issues = []
 
     all_issues = m2_issues + m3_issues + style_issues + m4_issues + m5_issues + m6_issues + m7_issues + m8_issues + m9_issues + tc_issues + g1_issues

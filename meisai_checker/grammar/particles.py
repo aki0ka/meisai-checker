@@ -161,4 +161,4 @@ def check_particles(sections: dict) -> list[dict]:
 def _is_noun_like(tok: dict) -> bool:
     """名詞・代名詞・形容動詞語幹など、「の」の前後に来る名詞的要素か判定。"""
     p = tok["pos"]
-    return p in ("名詞", "代名詞", "接頭辞", "形容動詞")
+    return p in ("名詞", "代名詞", "接頭辞", "形状詞")

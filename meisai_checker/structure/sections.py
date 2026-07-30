@@ -338,8 +338,8 @@ def check_midashi_numbers(sections):
 
     # パターン: 全角数字＋「．」 または （全角数字）
     # 階層: レベル1=「１．」, レベル2=「（１）」
-    level1_pat = re.compile(r'^[　\s]*([１-９１-９][０-９０-９]*)[\．.]')
-    level2_pat = re.compile(r'^[　\s]*（([１-９１-９][０-９０-９]*)）')
+    level1_pat = re.compile(r'^[　\s]*([１-９][０-９]*)[\．.]')
+    level2_pat = re.compile(r'^[　\s]*（([１-９][０-９]*)）')
 
     def zenkaku_to_int(s):
         return int(s.translate(str.maketrans('０１２３４５６７８９', '0123456789')))

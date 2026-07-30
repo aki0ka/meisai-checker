@@ -335,7 +335,7 @@ def _noun_span(tokens, start_idx):
                 continue
             break
         # 序数修飾中（「第」の後ろ）なら、数詞・名詞を全て連結
-        if ordinal_started and (t['pos'] == '数詞' or _is_noun_tok(t)):
+        if ordinal_started and (t['pos1'] == '数詞' or _is_noun_tok(t)):
             span.append(t)
             i += 1
             continue

@@ -127,7 +127,7 @@ def _extract_final_noun(tokens):
     # 末尾から逆順に最初の名詞を探す（助詞や句読点を除外）
     for i in range(len(tokens) - 1, -1, -1):
         t = tokens[i]
-        if t['pos1'] == '名詞' and len(t['surf']) >= 2:
+        if t['pos'] == '名詞' and len(t['surf']) >= 2:
             return t['surf']
     return None
 

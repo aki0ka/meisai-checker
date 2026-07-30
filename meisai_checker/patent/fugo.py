@@ -1104,19 +1104,18 @@ def _parse_fugo_setsumeisho(text):
         if fugo and name and classify_fugo(fugo):
             pairs[fugo] = name
 
-    # パターン②③: 符号[スペース/タブ]名称（行単位）
-    if not pairs:
-        for line in body.splitlines():
-            line = line.strip()
-            m2 = re.match(
-                r'^([０-９Ａ-Ｚ][０-９a-zA-Zａ-ｚＡ-Ｚ－]*)'
-                r'[\s　	]+(.+)$',
-                line)
-            if m2:
-                fugo = m2.group(1).strip()
-                name = m2.group(2).strip()
-                if fugo and name and classify_fugo(fugo):
-                    pairs[fugo] = name
+    # パターン②③: 符号[スペース/タブ]名称（行単位）。①④で拾えなかった行を補完する
+    for line in body.splitlines():
+        line = line.strip()
+        m2 = re.match(
+            r'^([０-９Ａ-Ｚ][０-９a-zA-Zａ-ｚＡ-Ｚ－]*)'
+            r'[\s　	]+(.+)$',
+            line)
+        if m2:
+            fugo = m2.group(1).strip()
+            name = m2.group(2).strip()
+            if fugo and name and fugo not in pairs and classify_fugo(fugo):
+                pairs[fugo] = name
 
     return pairs
 
