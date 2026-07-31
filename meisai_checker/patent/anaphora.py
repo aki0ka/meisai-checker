@@ -12,6 +12,7 @@ from ..tokenizer import (
     _noun_span,
     _span_to_str,
     _collect_defined_nouns,
+    _collect_distributive_refs,
     _find_dearu_defs,
     _scan_first_seen_as_plural,
     _noun_after_zenshou,
@@ -335,8 +336,16 @@ def check_zenshou(claims, dep_map):
             preamble_text = body[:m_pre.end()]
             tail_text = body[-200:]  # 末尾200文字
 
+            # ジェプソン型プリアンブルの必要条件：「であって/において」の直前が
+            # 末尾名詞（発明種類）そのものであること（例：「〜を備える検出装置において、」）。
+            # 「において」は「所定の条件において」のような本文中の場所格としても
+            # 頻出するため、この条件なしでは誤検出が多い（「であって」は型宣言の
+            # 接続としての用法が支配的で誤検出が少ないが、同じ条件で統一する）。
+            immediately_before_final_noun = body[:m_pre.start()].endswith(final_noun)
+
             # 末尾200文字内で final_noun が出現するかチェック
-            if final_noun in tail_text and final_noun in body[m_pre.end():]:
+            if (immediately_before_final_noun
+                    and final_noun in tail_text and final_noun in body[m_pre.end():]):
                 is_preamble = True
 
         # 前文に照応詞がある場合は警告（前文はタイプ表現のみにすべき）
@@ -438,9 +447,11 @@ def check_zenshou(claims, dep_map):
                     # だけの場合は対象外（分配文脈がなければ「当該N」がどの
                     # 個体を指すか定まらないため。E-type照応の成立条件）。
                     _defined_prefix = _collect_defined_nouns(prefix)
+                    _ref_prefix = _collect_distributive_refs(prefix)
                     for _qpfx, _ in _LEADING_QUANT_PREFIXES:
-                        _occs = _defined_prefix.get(_qpfx + noun)
-                        if _occs and any(o.distributive for o in _occs):
+                        _key = _qpfx + noun
+                        _occs = _defined_prefix.get(_key, []) + _ref_prefix.get(_key, [])
+                        if any(o.distributive for o in _occs):
                             found = True
                             break
             else:

@@ -580,26 +580,13 @@ def _collect_defined_nouns(tokens) -> dict[str, list['Occurrence']]:
     while i < n:
         t = tokens[i]
         # 照応詞の直後は参照語なのでスキップ
+        # 「前記複数のＸごとに」等の分配文脈は _collect_distributive_refs 側で
+        # 別管理する（このループでは新規定義として登録しない：参照であって
+        # 定義ではないため、ここで登録すると _bare_claims_tokenized 等の
+        # 「定義済み名詞句」判定を汚染してしまう）。
         if t['surf'] in _ZENSHOU_WORDS:
             skip_span = _noun_span(tokens, i + 1)
             _consumed = 1 + (len(skip_span) if skip_span else 0)
-            # 「前記複数のＸのそれぞれ」「当該Ｘの各々」等、参照側で分配マーカーが
-            # 続く場合は、参照先（skip_span の名詞句）に分配フラグを遡って記録する。
-            # 分配の宣言自体は「前記/当該」で既出のNを再度取り上げた際に起きる
-            # ことが多く、定義側の登録タイミングでは検出できないため。
-            if skip_span:
-                _k = i + 1 + len(skip_span)
-                _ref_distributive = (
-                    (_k + 1 < n and tokens[_k]['surf'] == 'の'
-                     and tokens[_k + 1]['surf'] in _DISTRIBUTIVE_SUFFIX_WORDS)
-                    or (_k + 1 < n and tokens[_k]['pos'] == '接尾辞'
-                        and tokens[_k]['surf'] in _ITER_DISTRIBUTIVE_SUFFIXES
-                        and tokens[_k + 1]['surf'] == 'に')
-                )
-                if _ref_distributive:
-                    _ref_key = _span_to_str(skip_span)
-                    nouns.setdefault(_ref_key, []).append(
-                        Occurrence(position=i + 1, distributive=True))
             i += _consumed
             continue
         _is_kata_keijo = (t['pos'] == '形状詞' and t['surf']
@@ -660,6 +647,44 @@ def _collect_defined_nouns(tokens) -> dict[str, list['Occurrence']]:
         else:
             i += 1
     return nouns
+
+
+def _collect_distributive_refs(tokens) -> dict[str, list['Occurrence']]:
+    """「前記複数のＸごとに」「当該Ｘの各々」等、参照側（前記/当該＋名詞句）に
+    分配マーカーが続く出現だけを収集する（名詞句 → Occurrence リスト）。
+
+    これは照応（reference）であって新規定義ではないため、_collect_defined_nouns
+    の戻り値（定義済み名詞句）とは別管理にする。「当該Ｘ」の束縛変数回収
+    （同一請求項内で分配文脈が確立しているかの判定）専用。
+    _bare_claims_tokenized 等の定義済み名詞句判定にこの出現を含めると、
+    参照に過ぎない「前記複数のＸごとに」を新規定義と誤認し、
+    先行詞重複の誤警告を生む（実案件で確認：分配マーカー越しの当該参照）。
+    """
+    refs: dict[str, list[Occurrence]] = {}
+    i = 0
+    n = len(tokens)
+    while i < n:
+        t = tokens[i]
+        if t['surf'] in _ZENSHOU_WORDS:
+            skip_span = _noun_span(tokens, i + 1)
+            _consumed = 1 + (len(skip_span) if skip_span else 0)
+            if skip_span:
+                _k = i + 1 + len(skip_span)
+                _ref_distributive = (
+                    (_k + 1 < n and tokens[_k]['surf'] == 'の'
+                     and tokens[_k + 1]['surf'] in _DISTRIBUTIVE_SUFFIX_WORDS)
+                    or (_k + 1 < n and tokens[_k]['pos'] == '接尾辞'
+                        and tokens[_k]['surf'] in _ITER_DISTRIBUTIVE_SUFFIXES
+                        and tokens[_k + 1]['surf'] == 'に')
+                )
+                if _ref_distributive:
+                    _ref_key = _span_to_str(skip_span)
+                    refs.setdefault(_ref_key, []).append(
+                        Occurrence(position=i + 1, distributive=True))
+            i += _consumed
+            continue
+        i += 1
+    return refs
 
 def _is_fugo_tok(t):
     """全角数字のみからなるトークン → 符号候補（pos1は数詞・普通名詞どちらでも可）"""
