@@ -457,7 +457,8 @@ def check_zenshou(claims, dep_map):
             else:
                 # 前記・上記
                 # まず同一請求項の前方で見つかれば常にOK
-                _prefix_found, _bridge_src, _verb_origin = _found_in_scope_ex(noun, prefix)
+                _prefix_found, _bridge_src, _verb_origin = _found_in_scope_ex(
+                    noun, prefix, plural_map=first_seen_as_plural)
                 if _prefix_found:
                     if _bridge_src:
                         issues.append({
@@ -514,13 +515,17 @@ def check_zenshou(claims, dep_map):
                     continue
                 if len(direct_parents) <= 1:
                     # 単項従属または独立：全祖先を結合してチェック
-                    found, _bridge_src, _verb_origin = _found_in_scope_ex(noun, ancestor_tokens)
+                    found, _bridge_src, _verb_origin = _found_in_scope_ex(
+                        noun, ancestor_tokens, plural_map=first_seen_as_plural)
                 else:
                     # 多項従属：いずれか一つの直接親のスコープで見つかれば良い
                     # 「請求項1又は2に記載の〜」は一方が適用されるので、
                     # 一方のスコープで見つかれば先行詞として成立する
                     _parent_results = [
-                        _found_in_scope_ex(noun, _scope_tokens_for_parent(p, dep_map, claim_tokens, _cache, _scope_toks_cache))
+                        _found_in_scope_ex(
+                            noun,
+                            _scope_tokens_for_parent(p, dep_map, claim_tokens, _cache, _scope_toks_cache),
+                            plural_map=first_seen_as_plural)
                         for p in direct_parents
                     ]
                     found = any(r[0] for r in _parent_results)

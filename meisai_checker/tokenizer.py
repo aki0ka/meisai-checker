@@ -939,13 +939,20 @@ def _spell_out_bridge(noun, scope_tokens):
     return None
 
 
-def _found_in_scope_ex(noun, scope_tokens):
+def _found_in_scope_ex(noun, scope_tokens, plural_map=None):
     """noun が scope_tokens 内の先行詞候補に一致するか判定。
 
     戻り値: (found: bool, bridge_original: str | None, verb_origin_only: bool)
     bridge_original が非Noneの場合、スペルアウト括弧書き省略によるブリッジマッチを示す。
     verb_origin_only は、noun のスコープ内の登場が全てサ変語幹＋「する」由来
     （例：「比較することにより」の「比較」）である場合に True。
+
+    plural_map: 例外4の「一のN」判定で使う「核名詞→複数形が先行しているか」の
+    事前計算済みマップ（呼び出し元が請求項をまたいだ範囲で計算したもの）。
+    None の場合は scope_tokens だけから計算する（従来通り、同一スコープ限定）。
+    前記・上記は祖先請求項を含めた範囲のマップを渡すことで、「複数のX」が
+    親請求項にしかない場合でも「一のX」の保持要求を正しく判定できる。
+    当該・該は意図的に同一請求項スコープに閉じるため plural_map を渡さない。
 
     例外1: UniDicが「部内」等を複合名詞化するケース → 末尾位置接尾辞を除去して再検索。
     例外2: スペルアウトブリッジ（「ＧＮＳＳ受信機」←「ＧＮＳＳ（…）受信機」）。
@@ -982,8 +989,8 @@ def _found_in_scope_ex(noun, scope_tokens):
     # 剥ぎ取って裸のNで照応させると束縛変数のカーディナリティ整合性チェックを
     # 迂回してしまう（上記docstring「量化子の剥ぎ取りは行わない」の趣旨通り）。
     for limiter in sorted(_LIMITERS, key=len, reverse=True):
-        # 「一」（∃、存在量化子）も他の量化子系限定詞と同様に橋渡し対象から除外。
-        # 「一のN」で導入された名前は「前記/当該N」（裸）では照応できない。
+        # 「一」は他の量化子系限定詞と同じくこのループでは常にスキップし、
+        # 判定は例外4（スコープベースの群ドメイン判定）に一本化する。
         if limiter in _ORDINAL_MODS or limiter in _QUANT_MODS or limiter == '一':
             continue
         with_limiter = limiter + 'の' + noun
@@ -992,6 +999,7 @@ def _found_in_scope_ex(noun, scope_tokens):
     # 例外4: 数量修飾「Nつの」「N個の」等+核名詞で導入された場合の核名詞単独照応
     # 「１つのセンサ」で導入 → 「前記センサ」で照応するパターンを許容
     # （「少なくとも」を伴う場合は既存の先行詞が核名詞で登録されるため対象外）
+    _plural_map = plural_map
     for dn in defined:
         if not dn.endswith('の' + noun):
             continue
@@ -999,12 +1007,14 @@ def _found_in_scope_ex(noun, scope_tokens):
         if not prefix:
             continue
         prefix_toks = _tokenize(prefix)
-        # 「一」単独は原則として橋渡し対象から除外：「一の」は「複数のXのうち
-        # 一のX」のような分割選択の局所的な名前であり、裸名詞への脱落を
-        # 許容しない（project_toukei_checker_design参照）。「１つの」「２個の」
-        # 等、助数詞を伴う数量修飾は引き続き橋渡しを許容する。
-        # ただし「少なくとも一の」は「少なくとも一つの」と同じ不定の存在導入
-        # （分割選択ではない）なので例外的に橋渡しを許容する。
+        # 「一」単独はスコープベースで判定する：「複数のnoun」等、同じ核名詞の
+        # 群（複数形）先行詞が同一スコープに存在する場合のみ、「一のnoun」への
+        # 保持を要求する（「複数のXのうち一のX」で群と個体を区別する必要が
+        # あるため）。群先行詞が存在しなければ「一の」は不定の存在導入
+        # （「一の願書」のように法令文体で談話冒頭に立つ用例が実在する）と
+        # みなし、「１つの」「２個の」等と同様に橋渡しを許容する。
+        # 「少なくとも一の」は群の有無に関わらず不定の存在導入（分割選択では
+        # ない）なので常に橋渡しを許容する。
         if prefix == '一':
             _occs = defined.get(dn, [])
             _sukunakutomo = any(
@@ -1012,7 +1022,10 @@ def _found_in_scope_ex(noun, scope_tokens):
                 or (o.position >= 1 and '少なくとも' in scope_tokens[o.position - 1]['surf'])
                 for o in _occs
             )
-            if not _sukunakutomo:
+            if _plural_map is None:
+                _plural_map = _scan_first_seen_as_plural(scope_tokens)
+            _has_plural_domain = _plural_map.get(noun, False)
+            if not _sukunakutomo and _has_plural_domain:
                 continue
         if ((len(prefix_toks) == 1 and prefix_toks[0]['pos1'] == '数詞')
                 or (len(prefix_toks) == 2
