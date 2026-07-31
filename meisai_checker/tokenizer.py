@@ -368,7 +368,11 @@ def _noun_span(tokens, start_idx):
                 ordinal_started = False  # 「の」で序数修飾モード終了
                 i += 1
             # (2) 限定詞：複数の・一方の・他の 等
-            elif prev['surf'] in _LIMITERS:
+            # 「第一の」のように「一」が序数修飾中（ordinal_started）に登場した
+            # 場合は数詞であって限定詞ではないため、この分岐の対象外にする
+            # （「第１の」「第二の」と挙動を揃え、「一」だけが特別扱いされる
+            # ことを避ける）。
+            elif prev['surf'] in _LIMITERS and not ordinal_started:
                 span.append(t)
                 i += 1
             # (3) 助数詞接尾辞（つ・個・本等）先行の「の」→ 数量修飾として継続
@@ -757,7 +761,8 @@ def _noun_after_zenshou(tokens, zenshou_idx):
                     return y, span_y[0]['start'], span_y[-1]['end']
 
     # 数詞＋「の」パターン（「一のN」等の限定量化子）
-    # 「前記一のひねり操作」→「操作」（ひねりが動詞品詞でも後続名詞を取得）
+    # 「前記一のひねり操作」→「一のひねり操作」（ひねりは連用形の複合名詞
+    # 形成なので操作と一体、_noun_span の動詞ブリッジ規則で吸収される）
     # 「第N」（接頭辞「第」付き）は序数修飾として通常パターンに任せる
     if (t1['pos1'] == '数詞'
             and j + 1 < n and tokens[j + 1]['surf'] == 'の'):
@@ -780,11 +785,17 @@ def _noun_after_zenshou(tokens, zenshou_idx):
                 # 「一の」のように動詞を伴わない裸の量化子は記述的修飾では
                 # ないため、noun_start を「一」の開始位置（zenshou直後）に
                 # して verb_modified（記述照応詞）判定を誤発火させない。
-                # 「一の」は∃（存在量化子）であり、局所的に新しい名前
-                # 「一のN」を生成する（各・複数の等の∀型とは異なり脱落させ
-                # ない。project_toukei_checker_design参照）。
+                # 「一の」は局所的に新しい名前「一のN」を生成し、脱落させると
+                # 先行詞不一致になる（project_toukei_checker_design参照）。
+                # 定義側（_collect_defined_nouns）は _LIMITERS 経由の _noun_span
+                # で「一の」＋連用形複合（例：一のひねり操作）まで一体で登録する
+                # ため、参照側も文字列結合ではなく同じ _noun_span を「一」の
+                # トークン位置から呼び直し、両者のキーを一致させる。
                 if t1['surf'] == '一':
-                    return '一の' + y, tokens[j]['start'], span_y[-1]['end']
+                    full_span = _noun_span(tokens, j)
+                    if full_span:
+                        return (_span_to_str(full_span), full_span[0]['start'],
+                                full_span[-1]['end'])
                 return y, tokens[j]['start'], span_y[-1]['end']
 
     # 形状詞修飾パターン
@@ -988,12 +999,21 @@ def _found_in_scope_ex(noun, scope_tokens):
         if not prefix:
             continue
         prefix_toks = _tokenize(prefix)
-        # 「一」単独は橋渡し対象から除外：「一の」は∃（存在量化子）として
-        # 局所的に新しい名前を生成するため、裸名詞への脱落を許容しない
-        # （project_toukei_checker_design参照）。「１つの」「２個の」等、
-        # 助数詞を伴う数量修飾のみ橋渡しを許容する。
+        # 「一」単独は原則として橋渡し対象から除外：「一の」は「複数のXのうち
+        # 一のX」のような分割選択の局所的な名前であり、裸名詞への脱落を
+        # 許容しない（project_toukei_checker_design参照）。「１つの」「２個の」
+        # 等、助数詞を伴う数量修飾は引き続き橋渡しを許容する。
+        # ただし「少なくとも一の」は「少なくとも一つの」と同じ不定の存在導入
+        # （分割選択ではない）なので例外的に橋渡しを許容する。
         if prefix == '一':
-            continue
+            _occs = defined.get(dn, [])
+            _sukunakutomo = any(
+                (o.position >= 1 and scope_tokens[o.position - 1]['surf'] == 'とも')
+                or (o.position >= 1 and '少なくとも' in scope_tokens[o.position - 1]['surf'])
+                for o in _occs
+            )
+            if not _sukunakutomo:
+                continue
         if ((len(prefix_toks) == 1 and prefix_toks[0]['pos1'] == '数詞')
                 or (len(prefix_toks) == 2
                     and prefix_toks[0]['pos1'] == '数詞'
