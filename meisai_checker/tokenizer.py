@@ -145,7 +145,7 @@ def _is_formal_noun_tok(t):
 
 _LIMITERS = {
     # 量化・選択
-    '複数', '一部', '他', '各', '全て', 'すべて', 'それぞれ',
+    '複数', '一部', '他', '各', '全て', 'すべて', 'それぞれ', '一',
     '一方', '他方', '両方', '双方', '少数', '多数', '全部',
     # 規定・特定（「所定の閾値」「特定の波長」等）
     '所定', '特定', '一定', '所望', '相互', '予定',
@@ -780,6 +780,11 @@ def _noun_after_zenshou(tokens, zenshou_idx):
                 # 「一の」のように動詞を伴わない裸の量化子は記述的修飾では
                 # ないため、noun_start を「一」の開始位置（zenshou直後）に
                 # して verb_modified（記述照応詞）判定を誤発火させない。
+                # 「一の」は∃（存在量化子）であり、局所的に新しい名前
+                # 「一のN」を生成する（各・複数の等の∀型とは異なり脱落させ
+                # ない。project_toukei_checker_design参照）。
+                if t1['surf'] == '一':
+                    return '一の' + y, tokens[j]['start'], span_y[-1]['end']
                 return y, tokens[j]['start'], span_y[-1]['end']
 
     # 形状詞修飾パターン
@@ -966,7 +971,9 @@ def _found_in_scope_ex(noun, scope_tokens):
     # 剥ぎ取って裸のNで照応させると束縛変数のカーディナリティ整合性チェックを
     # 迂回してしまう（上記docstring「量化子の剥ぎ取りは行わない」の趣旨通り）。
     for limiter in sorted(_LIMITERS, key=len, reverse=True):
-        if limiter in _ORDINAL_MODS or limiter in _QUANT_MODS:
+        # 「一」（∃、存在量化子）も他の量化子系限定詞と同様に橋渡し対象から除外。
+        # 「一のN」で導入された名前は「前記/当該N」（裸）では照応できない。
+        if limiter in _ORDINAL_MODS or limiter in _QUANT_MODS or limiter == '一':
             continue
         with_limiter = limiter + 'の' + noun
         if with_limiter in defined:
@@ -981,6 +988,12 @@ def _found_in_scope_ex(noun, scope_tokens):
         if not prefix:
             continue
         prefix_toks = _tokenize(prefix)
+        # 「一」単独は橋渡し対象から除外：「一の」は∃（存在量化子）として
+        # 局所的に新しい名前を生成するため、裸名詞への脱落を許容しない
+        # （project_toukei_checker_design参照）。「１つの」「２個の」等、
+        # 助数詞を伴う数量修飾のみ橋渡しを許容する。
+        if prefix == '一':
+            continue
         if ((len(prefix_toks) == 1 and prefix_toks[0]['pos1'] == '数詞')
                 or (len(prefix_toks) == 2
                     and prefix_toks[0]['pos1'] == '数詞'
