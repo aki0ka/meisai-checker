@@ -558,6 +558,10 @@ class Occurrence:
 # 「Nのそれぞれ」「Nの各々」等、Nに後続して分配を明示するマーカー
 _DISTRIBUTIVE_SUFFIX_WORDS = {'それぞれ', '各々', 'おのおの'}
 
+# 「Nごとに」「N毎に」等、Nに直接後続して分配を明示する接尾辞
+# （「の」を挟まず名詞に直結する点が _DISTRIBUTIVE_SUFFIX_WORDS と異なる）
+_ITER_DISTRIBUTIVE_SUFFIXES = {'ごと', '毎'}
+
 
 def _collect_defined_nouns(tokens) -> dict[str, list['Occurrence']]:
     """トークン列から定義済み名詞句を収集（名詞句 → Occurrence リスト）。
@@ -585,8 +589,14 @@ def _collect_defined_nouns(tokens) -> dict[str, list['Occurrence']]:
             # ことが多く、定義側の登録タイミングでは検出できないため。
             if skip_span:
                 _k = i + 1 + len(skip_span)
-                if (_k + 1 < n and tokens[_k]['surf'] == 'の'
-                        and tokens[_k + 1]['surf'] in _DISTRIBUTIVE_SUFFIX_WORDS):
+                _ref_distributive = (
+                    (_k + 1 < n and tokens[_k]['surf'] == 'の'
+                     and tokens[_k + 1]['surf'] in _DISTRIBUTIVE_SUFFIX_WORDS)
+                    or (_k + 1 < n and tokens[_k]['pos'] == '接尾辞'
+                        and tokens[_k]['surf'] in _ITER_DISTRIBUTIVE_SUFFIXES
+                        and tokens[_k + 1]['surf'] == 'に')
+                )
+                if _ref_distributive:
                     _ref_key = _span_to_str(skip_span)
                     nouns.setdefault(_ref_key, []).append(
                         Occurrence(position=i + 1, distributive=True))
@@ -633,6 +643,9 @@ def _collect_defined_nouns(tokens) -> dict[str, list['Occurrence']]:
                     or s.startswith('それぞれの')
                     or (_j + 1 < n and tokens[_j]['surf'] == 'の'
                         and tokens[_j + 1]['surf'] in _DISTRIBUTIVE_SUFFIX_WORDS)
+                    or (_j + 1 < n and tokens[_j]['pos'] == '接尾辞'
+                        and tokens[_j]['surf'] in _ITER_DISTRIBUTIVE_SUFFIXES
+                        and tokens[_j + 1]['surf'] == 'に')
                 )
                 nouns.setdefault(s, []).append(
                     Occurrence(position=i, verb_origin=_verb_origin,
