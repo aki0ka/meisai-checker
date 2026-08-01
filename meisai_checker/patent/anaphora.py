@@ -265,6 +265,24 @@ def _redundant_modifier_warning(num, surf, noun, mod_text):
     }
 
 
+def _head_match_error(num, surf, noun, head_only_source):
+    """当該/該で「所定のN」等の限定詞付き先行詞に対し、限定詞を落とした核名詞
+    （主要部）のみで参照した場合のERROR。修飾語の脱落は候補数に関わらず
+    曖昧性を確定させる（project_toukei_checker_design③）ため、常にERRORとする。
+    """
+    return {
+        'claim': num, 'level': 'error',
+        'word': surf, 'noun': noun,
+        'msg': (
+            f"請求項{num}：「{surf}{noun}」は「{head_only_source}」の主要部のみと一致します。"
+            f"修飾語を省略すると、後から類似要素（同じ主要部を持つ別の限定）が"
+            f"追加された場合に指示先が曖昧になります。"
+            f"「{surf}{head_only_source}」への変更、または「{noun}」を"
+            f"独立した先行詞として先に定義することを検討してください。"
+        ),
+    }
+
+
 def check_zenshou(claims, dep_map):
     """前記・上記・当該・該の先行詞チェック（fugashiトークンベース）。
 
@@ -436,9 +454,14 @@ def check_zenshou(claims, dep_map):
             prefix = tokens[:i]  # 同一請求項の前方
 
             _bridge_src = None
+            _head_only_src = None
             if t['surf'] in _TOUGAI_WORDS:
                 # 当該・該：同一請求項の前方のみ
-                found = _found_in_scope(noun, prefix)
+                # allow_modifier_bridge=False: 「所定のN」等の限定詞を落とした
+                # 主要部のみ一致は found とみなさない（③、下の not found ブロックで
+                # 専用ERRORにする）。_head_only_src にその際の先行詞側の文字列が残る。
+                found, _, _, _head_only_src = _found_in_scope_ex(
+                    noun, prefix, allow_modifier_bridge=False)
                 if not found:
                     # ② 束縛変数回収: 「各N」「Nのそれぞれ」等、実際に分配
                     # （各要素ごとの束縛変数）が確立された先行詞がある場合のみ
@@ -457,7 +480,7 @@ def check_zenshou(claims, dep_map):
             else:
                 # 前記・上記
                 # まず同一請求項の前方で見つかれば常にOK
-                _prefix_found, _bridge_src, _verb_origin = _found_in_scope_ex(
+                _prefix_found, _bridge_src, _verb_origin, _ = _found_in_scope_ex(
                     noun, prefix, plural_map=first_seen_as_plural)
                 if _prefix_found:
                     if _bridge_src:
@@ -515,7 +538,7 @@ def check_zenshou(claims, dep_map):
                     continue
                 if len(direct_parents) <= 1:
                     # 単項従属または独立：全祖先を結合してチェック
-                    found, _bridge_src, _verb_origin = _found_in_scope_ex(
+                    found, _bridge_src, _verb_origin, _ = _found_in_scope_ex(
                         noun, ancestor_tokens, plural_map=first_seen_as_plural)
                 else:
                     # 多項従属：いずれか一つの直接親のスコープで見つかれば良い
@@ -534,6 +557,12 @@ def check_zenshou(claims, dep_map):
 
             if not found:
                 suppressed = False
+                if t['surf'] in _TOUGAI_WORDS and _head_only_src:
+                    # ③ 主要部のみ一致（修飾語脱落）：候補数を問わず曖昧性確定のためERROR。
+                    # 「前記」側の限定詞ブリッジ（同じ例外3）は許容したままなので
+                    # ここで初めて not found になるのは当該・該のみ。
+                    issues.append(_head_match_error(num, t['surf'], noun, _head_only_src))
+                    continue
                 if t['surf'] in _TOUGAI_WORDS:
                     for j, tj in enumerate(prefix):
                         if tj['surf'] in ('前記', '上記'):

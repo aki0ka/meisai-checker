@@ -939,13 +939,22 @@ def _spell_out_bridge(noun, scope_tokens):
     return None
 
 
-def _found_in_scope_ex(noun, scope_tokens, plural_map=None):
+def _found_in_scope_ex(noun, scope_tokens, plural_map=None, allow_modifier_bridge=True):
     """noun が scope_tokens 内の先行詞候補に一致するか判定。
 
-    戻り値: (found: bool, bridge_original: str | None, verb_origin_only: bool)
+    戻り値: (found: bool, bridge_original: str | None, verb_origin_only: bool,
+             head_only_source: str | None)
     bridge_original が非Noneの場合、スペルアウト括弧書き省略によるブリッジマッチを示す。
     verb_origin_only は、noun のスコープ内の登場が全てサ変語幹＋「する」由来
     （例：「比較することにより」の「比較」）である場合に True。
+    head_only_source は、例外3（_LIMITERS限定詞＋核名詞のブリッジ）が一致した際の
+    先行詞側の完全な文字列（例：「所定の分岐画像」）。allow_modifier_bridge=False の
+    場合、この一致は found=True に反映せず（＝主要部のみ一致は解決とみなさない）、
+    呼び出し元が「当該」の③（修飾語脱落）ERROR判定に使えるようこの値だけ返す。
+
+    allow_modifier_bridge: False にすると例外3（限定詞剥ぎ取りブリッジ）の一致を
+    found としては採用しない。「前記」は従来通り True（許容）のまま使う。
+    「当該」は False を渡し、修飾語省略を曖昧性確定として扱う。
 
     plural_map: 例外4の「一のN」判定で使う「核名詞→複数形が先行しているか」の
     事前計算済みマップ（呼び出し元が請求項をまたいだ範囲で計算したもの）。
@@ -972,7 +981,7 @@ def _found_in_scope_ex(noun, scope_tokens, plural_map=None):
     defined = _collect_defined_nouns(scope_tokens)
     if noun in defined:
         occs = defined[noun]
-        return True, None, bool(occs) and all(o.verb_origin for o in occs)
+        return True, None, bool(occs) and all(o.verb_origin for o in occs), None
     if noun and noun[-1] in _LOC_SUFFIXES_BOUNDARY and len(noun) > 2:
         # 末尾の位置接尾辞を除去して再検索（例：「蓋部内」→「蓋部」）
         # MeCabが「部内」を複合名詞化するケース（蓋部内/収容部内等）でも対応するため
@@ -980,7 +989,7 @@ def _found_in_scope_ex(noun, scope_tokens, plural_map=None):
         base = noun[:-1]
         if len(base) >= 2 and base in defined:
             occs = defined[base]
-            return True, None, bool(occs) and all(o.verb_origin for o in occs)
+            return True, None, bool(occs) and all(o.verb_origin for o in occs), None
     # 例外3: 限定詞+核名詞で再検索（「分岐画像」→「所定の分岐画像」）
     # 「所定の分岐画像」で定義されている場合、「前記分岐画像」で照応できるようにする
     # ただし同一性変更限定詞（他・別）は除外：「他のX」≠「X」なので「前記X」では照応不可
@@ -988,6 +997,7 @@ def _found_in_scope_ex(noun, scope_tokens, plural_map=None):
     # 「複数のN」と導入されたなら「前記複数のN」で照応するのが正しい形であり、
     # 剥ぎ取って裸のNで照応させると束縛変数のカーディナリティ整合性チェックを
     # 迂回してしまう（上記docstring「量化子の剥ぎ取りは行わない」の趣旨通り）。
+    head_only_source = None
     for limiter in sorted(_LIMITERS, key=len, reverse=True):
         # 「一」は他の量化子系限定詞と同じくこのループでは常にスキップし、
         # 判定は例外4（スコープベースの群ドメイン判定）に一本化する。
@@ -995,7 +1005,12 @@ def _found_in_scope_ex(noun, scope_tokens, plural_map=None):
             continue
         with_limiter = limiter + 'の' + noun
         if with_limiter in defined:
-            return True, None, False
+            if allow_modifier_bridge:
+                return True, None, False, None
+            # 当該・該：主要部のみ一致（修飾語脱落）は found とせず、
+            # 呼び出し元が③ERRORを組み立てられるよう先行詞側の文字列だけ残す。
+            head_only_source = with_limiter
+            break
     # 例外4: 数量修飾「Nつの」「N個の」等+核名詞で導入された場合の核名詞単独照応
     # 「１つのセンサ」で導入 → 「前記センサ」で照応するパターンを許容
     # （「少なくとも」を伴う場合は既存の先行詞が核名詞で登録されるため対象外）
@@ -1032,12 +1047,12 @@ def _found_in_scope_ex(noun, scope_tokens, plural_map=None):
                     and prefix_toks[0]['pos1'] == '数詞'
                     and prefix_toks[1]['pos'] == '接尾辞'
                     and prefix_toks[1]['pos1'] == '名詞的')):
-            return True, None, False
+            return True, None, False, None
     # スペルアウトブリッジフォールバック
     bridge = _spell_out_bridge(noun, scope_tokens)
     if bridge:
-        return True, bridge, False
-    return False, None, False
+        return True, bridge, False, None
+    return False, None, False, head_only_source
 
 
 def _found_in_scope(noun, scope_tokens):
@@ -1058,5 +1073,5 @@ def _found_in_scope(noun, scope_tokens):
     例外3: スペルアウトブリッジ（_found_in_scope_ex 参照）。
     ブリッジ情報が不要な呼び出し元向けのシム。
     """
-    found, _, _ = _found_in_scope_ex(noun, scope_tokens)
+    found, _, _, _ = _found_in_scope_ex(noun, scope_tokens)
     return found
