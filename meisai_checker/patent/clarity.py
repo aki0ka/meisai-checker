@@ -354,6 +354,8 @@ def check_relative_expression(
         for m in re.finditer(r'【(\d{4})】(.*?)(?=【\d{4}】|\Z)', desc, re.DOTALL):
             para_id = m.group(1)
             for sent in _split_sentences(m.group(2)):
-                issues += _check_sentence_relative(sent, f'【{para_id}】', 'info', cite='')
+                for issue in _check_sentence_relative(sent, f'【{para_id}】', 'info', cite=''):
+                    issue['para_id'] = 'p-' + para_id
+                    issues.append(issue)
 
     return issues

@@ -45,6 +45,8 @@ _KEITAL_SENTENCE_PAT = re.compile(
 # 見出し行・段落番号行のパターン
 _HEADING_PAT = re.compile(r'^【[^】]+】\s*$')
 _PARA_NUM_PAT = re.compile(r'^【\d{4,5}】')
+_PARA_ID_PAT = re.compile(r'^【(\d{4,5})】')
+_CLAIM_NUM_PAT = re.compile(r'^【請求項(\d+)】')
 
 
 def check_style(sections):
@@ -67,8 +69,16 @@ def check_style(sections):
     for section_name, text in targets:
         if not text:
             continue
+        current_para = None
+        current_claim = None
         for lineno, line in enumerate(text.splitlines(), 1):
             stripped = line.strip()
+            pm = _PARA_ID_PAT.match(stripped)
+            if pm:
+                current_para = 'p-' + pm.group(1)
+            cm = _CLAIM_NUM_PAT.match(stripped)
+            if cm:
+                current_claim = int(cm.group(1))
             # 見出し行・段落番号行はスキップ
             if _HEADING_PAT.match(stripped):
                 continue
@@ -85,11 +95,16 @@ def check_style(sections):
                 if key in seen:
                     continue
                 seen.add(key)
-                issues.append({
+                issue = {
                     "milestone": "TC3", "level": "warning",
                     "msg": f"敬体（です・ます体）が使用されています（{section_name}）："
                            f"「{snippet}」",
                     "detail": f"明細書は常体（〜する。〜である。）で記述することが原則です",
-                })
+                }
+                if current_claim:
+                    issue["claim"] = current_claim
+                elif current_para:
+                    issue["para_id"] = current_para
+                issues.append(issue)
 
     return issues
