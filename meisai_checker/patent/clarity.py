@@ -168,7 +168,7 @@ _RELATIVE_ADJECTIVES: list[str] = [
     '高い', '低い', '速い', '早い', '遅い', '多い', '少ない',
     '大きい', '小さい', '良い', 'よい', '悪い', '強い', '弱い',
     '長い', '短い', '重い', '軽い', '広い', '狭い',
-    '深い', '浅い', '厚い', '薄い', '硬い', '柔らかい',
+    '深い', '浅い', '厚い', '薄い', '硬い', '柔らかい', '濃い',
 ]
 
 _CHANGE_VERB_STEMS: list[str] = [
@@ -260,12 +260,15 @@ def _is_correlation_expr(sentence: str) -> bool:
 
     「遠ざかるほど狭まる」のような空間形状記述では連動語の前方が
     空間的参照点（遠ざかる等）であり、変化動詞でなくてよい。
-    連動語の後方に変化動詞があれば連動表現とみなす。
+    連動語の後方に変化動詞または相対形容詞があれば連動表現とみなす
+    （例：「危険度が高いほど濃い赤色にする」は「高い」と「濃い」を
+    比例関係で結んでおり、個々の形容詞に外部の比較基準は不要）。
     """
     m = _CORRELATION_CONNECTIVE_PAT.search(sentence)
     if not m:
         return False
-    return _has_change_verb(sentence[m.end():])
+    after = sentence[m.end():]
+    return _has_change_verb(after) or any(adj in after for adj in _RELATIVE_ADJECTIVES)
 
 
 def _split_sentences(text: str) -> list[str]:
@@ -279,6 +282,7 @@ def _check_sentence_relative(
     cite: str = _RELATIVE_CITE,
 ) -> list[dict[str, Any]]:
     issues: list[dict] = []
+    prefix = f'{context}：' if context else ''
 
     # ① 程度副詞（無条件）
     for adv in _DEGREE_ADVERBS:
@@ -287,7 +291,7 @@ def _check_sentence_relative(
                 'level': level,
                 'check': 'clarity_relative',
                 'msg': (
-                    f'{context}：程度副詞「{adv}」は技術的根拠になりません。'
+                    f'{prefix}程度副詞「{adv}」は技術的根拠になりません。'
                     f'具体的な数値または条件で記載してください。'
                     f'{cite}'
                 ),
@@ -296,14 +300,14 @@ def _check_sentence_relative(
     # ② 相対形容詞（同一文に比較基準なければ警告）
     # 「〜てもよい」等の許可表現を除去してから判定
     sentence_adj = _PERMISSIVE_YOKU_PAT.sub('', sentence)
-    if not _COMPARISON_BASIS_PAT.search(sentence):
+    if not (_COMPARISON_BASIS_PAT.search(sentence) or _is_correlation_expr(sentence)):
         for adj in _RELATIVE_ADJECTIVES:
             if adj in sentence_adj:
                 issues.append({
                     'level': level,
                     'check': 'clarity_relative',
                     'msg': (
-                        f'{context}：相対形容詞「{adj}」に比較基準がありません。'
+                        f'{prefix}相対形容詞「{adj}」に比較基準がありません。'
                         f'「〜と比べて」「従来〜に対して」等の基準を明示してください。'
                         f'{cite}'
                     ),
@@ -319,7 +323,7 @@ def _check_sentence_relative(
                 'level': level,
                 'check': 'clarity_relative',
                 'msg': (
-                    f'{context}：変化動詞「{verb}」に比較基準がありません。'
+                    f'{prefix}変化動詞「{verb}」に比較基準がありません。'
                     f'「〜と比べて」「従来〜に対して」等の基準を明示してください。'
                     f'{cite}'
                 ),
@@ -354,7 +358,7 @@ def check_relative_expression(
         for m in re.finditer(r'【(\d{4})】(.*?)(?=【\d{4}】|\Z)', desc, re.DOTALL):
             para_id = m.group(1)
             for sent in _split_sentences(m.group(2)):
-                for issue in _check_sentence_relative(sent, f'【{para_id}】', 'info', cite=''):
+                for issue in _check_sentence_relative(sent, '', 'info', cite=''):
                     issue['para_id'] = 'p-' + para_id
                     issues.append(issue)
 

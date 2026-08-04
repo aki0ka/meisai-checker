@@ -80,7 +80,7 @@ def check_length(sections, max_chars=DEFAULT_MAX_CHARS):
                 snippet = sent[:30] + "…" + sent[-20:] if n > 50 else sent
                 issues.append({
                     "milestone": "TC4", "level": "info",
-                    "msg": (f"【{para_id}】一文が{n}文字と長くなっています"
+                    "msg": (f"一文が{n}文字と長くなっています"
                             f"（上限目安：{max_chars}文字）"),
                     "detail": snippet,
                     "para_id": f"p-{para_id}",

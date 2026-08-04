@@ -636,9 +636,11 @@ def _extract_elements_tokens(text):
                 # 例: 吸収体（１０８１）→ j が「（」を指している場合にスキップ
                 # name_end は「（」を含めない要素名の境界（jはこの後符号トークンまで進める）
                 name_end = j
+                in_bracket = False
                 if (j < n and tokens[j]['surf'] == '（'
                         and j + 1 < n and _is_fugo_tok(tokens[j + 1])):
                     j += 1  # 「（」をスキップして符号トークンへ
+                    in_bracket = True
 
                 if j < n and _is_fugo_tok(tokens[j]):
                     noun_toks_raw = tokens[i:name_end]
@@ -679,6 +681,11 @@ def _extract_elements_tokens(text):
                             or len(core_name) < 1):
                         fugo_parts, j = _collect_fugo_suffix(tokens, j)
                         fugo = ''.join(fugo_parts)
+                        # 括弧形式は「（符号）」が丸ごと符号のみで閉じている場合に限る。
+                        # 「マップ（２次元マップ）」のように括弧内に符号以外の
+                        # 文字が続く場合は「２」を符号と誤認しない
+                        if in_bracket and not (j < n and tokens[j]['surf'] == '）'):
+                            fugo = ''
                         if classify_fugo(fugo) == 'drawing':
                             char_off = noun_toks[0]['start'] if noun_toks else (
                                 noun_toks_raw[0]['start'] if noun_toks_raw else offset)
