@@ -295,6 +295,7 @@ def _check_sentence_relative(
                     f'具体的な数値または条件で記載してください。'
                     f'{cite}'
                 ),
+                'target_text': adv,  # GUI: クリック時にこの語をマーカー表示
             })
 
     # ② 相対形容詞（同一文に比較基準なければ警告）
@@ -311,6 +312,7 @@ def _check_sentence_relative(
                         f'「〜と比べて」「従来〜に対して」等の基準を明示してください。'
                         f'{cite}'
                     ),
+                    'target_text': adj,  # GUI: クリック時にこの語をマーカー表示
                 })
 
     # ③ 方向性変化動詞（比較基準または連動表現がなければ警告）
@@ -327,6 +329,7 @@ def _check_sentence_relative(
                     f'「〜と比べて」「従来〜に対して」等の基準を明示してください。'
                     f'{cite}'
                 ),
+                'target_text': verb,  # GUI: クリック時にこの語をマーカー表示
             })
 
     return issues

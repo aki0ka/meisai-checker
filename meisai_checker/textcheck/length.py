@@ -84,6 +84,7 @@ def check_length(sections, max_chars=DEFAULT_MAX_CHARS):
                             f"（上限目安：{max_chars}文字）"),
                     "detail": snippet,
                     "para_id": f"p-{para_id}",
+                    "target_text": sent,  # GUI: クリック時にこの文をマーカー表示
                 })
 
     return issues

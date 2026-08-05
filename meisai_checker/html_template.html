@@ -135,6 +135,9 @@ header{height:var(--hdr);display:flex;align-items:center;gap:14px;
 .fugo-num{font-family:var(--mono);font-size:.9em;color:var(--green);margin-left:1px;}
 .hl-fugo-err .fugo-num{color:var(--red)}
 .hl-fugo.hl-active,.hl-fugo-err.hl-active{outline:2px solid var(--green);outline-offset:1px;}
+/* TC4（文長）・clarity_relative（相対表現）: issueクリック時のみ表示するマーカー */
+mark.hl-target{background:rgba(56,132,245,.18);color:inherit;border-radius:2px;padding:0 1px;
+  border-bottom:2px solid var(--blue);}
 /* 右パネル */
 .panel{display:flex;flex-direction:column;overflow:hidden}
 .panel-top{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
@@ -1898,12 +1901,50 @@ function showAllClaims() {
   showAllBlocks();
 }
 
+// ── TC4（文長）・clarity_relative（相対表現）: クリック時のみのテキストマーカー ──
+// 既存のhl-fugo/hl-zenshouスパンをまたがない範囲（同一テキストノード内）のみ対象。
+// またぐ場合はrange.surroundContentsが例外を投げるので、その出現だけ諦める。
+function clearTextHighlights() {
+  document.querySelectorAll('mark.hl-target').forEach(function(m){
+    var parent = m.parentNode;
+    if (!parent) return;
+    while (m.firstChild) parent.insertBefore(m.firstChild, m);
+    parent.removeChild(m);
+    parent.normalize();
+  });
+}
+function highlightTextInBlock(containerEl, targetText) {
+  if (!containerEl || !targetText) return;
+  var guard = 0, changed = true;
+  while (changed && guard < 50) {
+    changed = false; guard++;
+    var walker = document.createTreeWalker(containerEl, NodeFilter.SHOW_TEXT, null);
+    var node;
+    while ((node = walker.nextNode())) {
+      if (node.parentNode && node.parentNode.closest && node.parentNode.closest('mark.hl-target')) continue;
+      var idx = node.nodeValue.indexOf(targetText);
+      if (idx === -1) continue;
+      var range = document.createRange();
+      range.setStart(node, idx);
+      range.setEnd(node, idx + targetText.length);
+      var mark = document.createElement('mark');
+      mark.className = 'hl-target';
+      try {
+        range.surroundContents(mark);
+        changed = true;
+      } catch (e) { /* 既存スパンをまたぐ場合はこの出現をスキップ */ }
+      break; // DOMが変わったのでwalkerを取り直す
+    }
+  }
+}
+
 // ── 他タブissueクリック ──
 function selectIssue(iss, rowIdx, mid) {
   document.querySelectorAll('.issue-row').forEach(function(r){r.classList.remove('active');});
   var row = document.querySelector('.issue-row[data-idx="'+rowIdx+'"][data-mid="'+mid+'"]');
   if(row) { row.classList.add('active'); row.scrollIntoView({behavior:'smooth', block:'nearest'}); }
 
+  clearTextHighlights();
   var wrap = document.getElementById('block-wrap');
   var blocks = G.data ? G.data.blocks : [];
 
@@ -1930,7 +1971,11 @@ function selectIssue(iss, rowIdx, mid) {
     showAllBlocks();
     setTimeout(function(){
       var el = document.getElementById('view-'+focusId);
-      if (el) { el.classList.add('focused'); el.scrollIntoView({behavior:'smooth', block:'center'}); }
+      if (el) {
+        el.classList.add('focused');
+        el.scrollIntoView({behavior:'smooth', block:'center'});
+        if (iss.target_text) highlightTextInBlock(el.querySelector('.block-body') || el, iss.target_text);
+      }
     }, 80);
     return;
   }
@@ -1954,7 +1999,10 @@ function selectIssue(iss, rowIdx, mid) {
   applyLineBreakToWrap(wrap);
   setTimeout(function(){
     var el = document.getElementById('view-'+focusId);
-    if (el) el.scrollIntoView({behavior:'smooth', block:'center'});
+    if (el) {
+      el.scrollIntoView({behavior:'smooth', block:'center'});
+      if (iss.target_text) highlightTextInBlock(el.querySelector('.block-body') || el, iss.target_text);
+    }
   }, 50);
 }
 
