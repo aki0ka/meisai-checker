@@ -8,6 +8,26 @@ NEC 選定 IBM 拡張、IBM 拡張、半角カタカナ等）を検出する。
 
 from __future__ import annotations
 
+import re
+
+from ..parser import z2h
+from ..patent.fugo import _offset_to_para_id
+
+
+# 【請求項Ｎ】マーカー検出用（parser.parse_claimsの請求項見出しパターンと同一）
+_CLAIM_HEADER_PAT = re.compile(r'【請求項([０-９0-9]+)】')
+
+
+def _offset_to_claim(text, offset):
+    """文字オフセットから最も近い【請求項Ｎ】の請求項番号を返す（メインペインジャンプ用）"""
+    current = None
+    for m in _CLAIM_HEADER_PAT.finditer(text):
+        if m.start() <= offset:
+            current = z2h(m.group(1))
+        else:
+            break
+    return int(current) if current and current.isdigit() else None
+
 
 # 「マッピングにズレがある記号」対応表: {NG文字のコードポイント: (OK文字, OK文字のコードポイント)}
 # NG側はJIS X 0208規格上は正しいが、電子出願ソフト（Windows/CP932環境）では
@@ -159,14 +179,18 @@ def _section_label(sec_key):
 def check_jis(sections):
     """全セクションをスキャンしてJIS X 0208外文字を検出する。"""
     issues = []
-    seen_ng   = {}  # {char: (section_label, lineno, context)}  重複排除
+    seen_ng   = {}  # {char: (section_label, lineno, context, ...)}  重複排除
     seen_warn = {}
+
+    # メインペインジャンプ対象（claim番号／para_id）が求められるセクションのみ
+    _JUMPABLE = {'claims', 'description'}
 
     for sec_key in ('title', 'claims', 'description', 'drawings', 'abstract', '_raw'):
         text = sections.get(sec_key, '')
         if not text:
             continue
         label = _section_label(sec_key)
+        jumpable = sec_key in _JUMPABLE
         # 改ページ(\x0c)はsplitlines()で行区切りになるため事前に検出
         if '\x0c' in text:
             ff_line = next(
@@ -175,9 +199,12 @@ def check_jis(sections):
             context = text.splitlines()[ff_line-1].strip()[:40] if text.splitlines() else ''
             key = (sec_key, '\x0c')
             if key not in seen_warn:
+                ff_offset = text.find('\x0c')
+                claim, para_id = _jump_target(sec_key, text, ff_offset, jumpable)
                 seen_warn[key] = (label, ff_line, context,
                     '改ページ文字（FF, U+000C）が含まれています。出願前に削除または改行に変換を推奨します。',
-                    'U+000C')
+                    'U+000C', claim, para_id)
+        offset = 0
         for lineno, line in enumerate(text.splitlines(), 1):
             for col, char in enumerate(line, 1):
                 if char in (' ', '\t', '\n', '\r'):
@@ -185,6 +212,7 @@ def check_jis(sections):
                 status, reason = _jis_char_status(char)
                 if status == 'skip':
                     continue
+                abs_offset = offset + col - 1
                 if status == 'ng':
                     key = char
                     if key not in seen_ng:
@@ -193,37 +221,70 @@ def check_jis(sections):
                         # 不可視文字は文字コードで表示
                         cp = ord(char)
                         display = char if cp >= 0x20 else f'U+{cp:04X}'
-                        seen_ng[key] = (label, lineno, context, reason, alt, display)
+                        claim, para_id = _jump_target(sec_key, text, abs_offset, jumpable)
+                        seen_ng[key] = (label, lineno, context, reason, alt, display, claim, para_id)
                 elif status == 'warn':
                     key = (sec_key, char)
                     if key not in seen_warn:
                         context = line.strip()[:40]
                         cp = ord(char)
                         display = char if cp >= 0x20 else f'U+{cp:04X}'
-                        seen_warn[key] = (label, lineno, context, reason, display)
+                        claim, para_id = _jump_target(sec_key, text, abs_offset, jumpable)
+                        seen_warn[key] = (label, lineno, context, reason, display, claim, para_id)
+            offset += len(line) + 1
 
-    for char, (sec_label, lineno, context, reason, alt, display) in sorted(
+    for char, (sec_label, lineno, context, reason, alt, display, claim, para_id) in sorted(
             seen_ng.items(), key=lambda x: ord(x[0])):
         alt_str = f'　→ {alt}' if alt else ''
         cp = ord(char)
         cp_str = f' (U+{cp:04X})' if cp < 0x20 or not char.isprintable() else ''
-        issues.append({
+        issue = {
             'milestone': 'M5',
             'level': 'warning',
             'msg': f'JIS外文字「{display}」{cp_str}が使用されています（{reason}）{alt_str}',
             'detail': f'{sec_label} 行{lineno}付近：{context}',
-        })
+        }
+        _attach_jump_target(issue, claim, para_id, display)
+        issues.append(issue)
 
-    for (sec_key, char), (sec_label, lineno, context, reason, display) in sorted(
+    for (sec_key, char), (sec_label, lineno, context, reason, display, claim, para_id) in sorted(
             seen_warn.items(), key=lambda x: x[0]):
         cp = ord(char) if len(char) == 1 else 0
         is_ctrl = (cp > 0 and cp < 0x20)
-        issues.append({
+        # 非制御文字（マッピングズレ記号・半角カタカナ等）は、先頭の文字自体にも
+        # コードポイントを併記する（対象文字のUnicode上の正体を明示するため）。
+        # 制御文字は reason 文中に既にコードポイントを含むため二重表記を避ける。
+        cp_str = '' if is_ctrl else f'（U+{cp:04X}）'
+        issue = {
             'milestone': 'M5',
             'level': 'warning' if is_ctrl else 'style',
             'msg': (f'「{display}」{reason}' if is_ctrl
-                    else f'「{display}」は{reason}'),
+                    else f'「{display}」{cp_str}は{reason}'),
             'detail': f'{sec_label} 行{lineno}付近：{context}',
-        })
+        }
+        _attach_jump_target(issue, claim, para_id, display)
+        issues.append(issue)
 
     return issues
+
+
+def _jump_target(sec_key, text, offset, jumpable):
+    """(claim番号, para_id) を返す。ジャンプ非対応セクションは (None, None)。"""
+    if not jumpable:
+        return None, None
+    if sec_key == 'claims':
+        return _offset_to_claim(text, offset), None
+    if sec_key == 'description':
+        return None, _offset_to_para_id(text, offset)
+    return None, None
+
+
+def _attach_jump_target(issue, claim, para_id, display):
+    """メインペインジャンプ用フィールド（claim/para_id/target_text）をissueに付与する。"""
+    if claim is not None:
+        issue['claim'] = claim
+    if para_id:
+        issue['para_id'] = para_id
+    # target_text はテキスト内検索でハイライトするため、制御文字表記（U+XXXX）は対象外
+    if (claim is not None or para_id) and len(display) == 1 and ord(display) >= 0x20:
+        issue['target_text'] = display
