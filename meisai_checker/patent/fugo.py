@@ -100,6 +100,23 @@ def _is_name_tok(t):
     return _is_noun_tok(t)
 
 
+def _is_nakaguro_join(tokens, j):
+    """中点（・）が複合名の連結記号として機能しているか判定。
+
+    fugashi/MeCabは「・」を補助記号として分割するため、_is_name_tok の
+    継続判定では複合名の途中で名詞列が打ち切られてしまう
+    （例：「属性・関連度データベース」→「属性」で切れて「関連度データベース」
+    のみが要素名になる）。前後どちらも名詞相当トークンであれば連結記号
+    として扱い、名詞列の継続を許可する。
+    """
+    n = len(tokens)
+    if j <= 0 or j + 1 >= n:
+        return False
+    if tokens[j]['surf'] != '・':
+        return False
+    return _is_name_tok(tokens[j - 1]) and _is_name_tok(tokens[j + 1])
+
+
 # ── 公報番号パターン ──────────────────────────────────────────
 
 _KOHO_PAT = re.compile(
@@ -493,7 +510,7 @@ def _extract_elements_tokens(text):
                 if (t['pos'] == '接頭辞' and t['surf'] == '第'
                         and i+1 < n and _is_fugo_tok(tokens[i+1])):
                     oj = i + 2
-                    while (oj < n and _is_name_tok(tokens[oj])
+                    while (oj < n and (_is_name_tok(tokens[oj]) or _is_nakaguro_join(tokens, oj))
                            and not _is_fugo_tok(tokens[oj])
                            and tokens[oj]['surf'] not in _ZENSHOU_WORDS
                            # 全角英字1文字＋直後が全角数字 → 変数記号側で停止
@@ -530,7 +547,7 @@ def _extract_elements_tokens(text):
                 elif (t['surf'] in _ORDINAL_MODS
                         and i+1 < n and tokens[i+1]['surf'] == 'の'):
                     oj = i + 2
-                    while (oj < n and _is_name_tok(tokens[oj])
+                    while (oj < n and (_is_name_tok(tokens[oj]) or _is_nakaguro_join(tokens, oj))
                            and not _is_fugo_tok(tokens[oj])
                            and tokens[oj]['surf'] not in _ZENSHOU_WORDS
                            # 全角英字1文字＋直後が全角数字 → 変数記号側で停止
@@ -616,7 +633,7 @@ def _extract_elements_tokens(text):
                 # （凹・凸等の活用しない形容詞語幹）にも影響されない。
                 # 形式名詞（とき・ため・うち等）は要素名の核ではないので停止
                 j = i
-                while (j < n and _is_name_tok(tokens[j])
+                while (j < n and (_is_name_tok(tokens[j]) or _is_nakaguro_join(tokens, j))
                        and not _is_fugo_tok(tokens[j])
                        and not _is_formal_noun_tok(tokens[j])
                        and tokens[j]['surf'] not in _ZENSHOU_WORDS):
