@@ -187,6 +187,25 @@ def _uniqueness_warning(num, surf, noun, bare_claims):
     }
 
 
+def _uniqueness_warning_same_claim(num, surf, noun, count, extra_claims=None):
+    """同一請求項内で同じ名詞句が複数回、照応詞なしで導入された場合の警告。
+
+    例：「生地の弾力を推定する推定手段と、〜生地の弾力を測定する測定手段と、
+    前記弾力を示す〜」で「弾力」が同一請求項内に2箇所裸定義されているため、
+    「前記弾力」がどちらを指すか特定できない（先行詞重複の請求項内版）。
+    """
+    extra = ""
+    if extra_claims and len(extra_claims) > 1:
+        extra = f"さらに複数の請求項（{sorted(extra_claims)}）にも先行詞が存在します。"
+    return {
+        'claim': num, 'level': 'warning',
+        'word': surf, 'noun': noun,
+        'msg': (f"請求項{num}：「{surf}{noun}」の先行詞が同一請求項内に{count}箇所存在し、"
+                f"どちらを指すか特定できません（先行詞重複）。{extra}"
+                f"各{noun}に固有の名称を付与することを検討してください。"),
+    }
+
+
 def _plural_intro_warning(num, surf, noun):
     """早いものがち戦略：群（複数のN）が先行しているのに裸の「前記N」で照応した場合の警告。"""
     return {
@@ -253,6 +272,44 @@ def _redundant_modifier_clause_start(tokens, zenshou_idx):
                 and tokens[k2 + 1]['surf'] == 'が' and tokens[k2 + 1]['pos'] == '助詞'):
             return j
     return None
+
+
+def _preceding_clause_disambiguates(tokens, zenshou_idx):
+    """zenshou_idxを含む節（直前の句読点以降）に、他の前記/当該参照が
+    先行して含まれていれば True。
+
+    「前記第１媒体を透過した前記直線偏光」（動詞由来の修飾節）・
+    「前記第１光源からの前記直線偏光」（の格による修飾）のように、
+    直前の修飾がどのインスタンスかを別の前記/当該Xで特定している場合、
+    同一請求項内での同名詞の複数回裸定義があっても曖昧ではないとみなし、
+    唯一性崩壊警告（請求項内版）から除外する。
+    「前記/当該X+が」限定の_redundant_modifier_clause_startとは判定基準が
+    異なる（あちらは「絞り込みとして冗長かどうか」、こちらは「実際に
+    曖昧性を解消しているか」を見るため）。
+    """
+    i = zenshou_idx
+    if i == 0:
+        return False
+    clause_start = 0
+    for k in range(i - 1, -1, -1):
+        if tokens[k]['pos'] == '補助記号':
+            clause_start = k + 1
+            break
+    return any(tokens[j]['surf'] in _ZENSHOU_WORDS for j in range(clause_start, i))
+
+
+_DISTRIB_TAIL_PAT = re.compile(r'^[^、。]{0,15}(それぞれ|各々|おのおの)')
+
+
+def _followed_by_distributive_marker(body, noun_end_pos):
+    """noun直後（次の句読点まで）に「それぞれ／各々／おのおの」があれば True。
+
+    「前記光学ノイズがそれぞれ除去された前記第１検出部および前記第２検出部」
+    のように、直前で複数回裸定義された名詞を「それぞれ」で分配参照している
+    場合は、どれを指すか特定できない曖昧参照ではなく意図的な分配参照なので、
+    唯一性崩壊警告（請求項内版）の対象から除外する。
+    """
+    return bool(_DISTRIB_TAIL_PAT.search(body[noun_end_pos:noun_end_pos + 40]))
 
 
 def _redundant_modifier_warning(num, surf, noun, mod_text):
@@ -505,6 +562,15 @@ def check_zenshou(claims, dep_map):
                         if _verb_origin and (num, noun, 'verb_origin') not in _uniqueness_seen:
                             _uniqueness_seen.add((num, noun, 'verb_origin'))
                             issues.append(_verb_origin_suggestion(num, t['surf'], noun))
+                        # 同一請求項内でnounが照応詞なしで複数回導入されていないか
+                        # （唯一性崩壊の請求項内版：例えば推定手段と測定手段が
+                        # それぞれ独立に「生地の弾力」を裸名詞で導入した場合、
+                        # 後続の「前記弾力」がどちらを指すか特定できない）
+                        same_claim_defined = _collect_defined_nouns(tokens[:i])
+                        same_claim_dup = (len(same_claim_defined.get(noun, [])) > 1
+                                           and not _preceding_clause_disambiguates(tokens, i)
+                                           and not _followed_by_distributive_marker(
+                                               body, noun_start + len(noun)))
                         if len(direct_parents) > 1:
                             # 多項従属: 各親スコープで独立して唯一性を評価。
                             # 「請求項1又は2に記載の〜」は一方を選べば必ず一意なので、
@@ -519,18 +585,23 @@ def check_zenshou(claims, dep_map):
                         else:
                             anc_body_toks = {a: claim_body_items[a] for a in ancestors if a in claim_body_items}
                             bare = _bare_claims_tokenized(noun, anc_body_toks, claim_defined_nouns)
-                            if noun in _collect_defined_nouns(tokens[:i]):  # i未満なのでプリ計算不可
+                            if noun in same_claim_defined:
                                 bare.add(num)
-                        if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
+                        if (len(bare) > 1 or same_claim_dup) and (num, noun) not in _uniqueness_seen:
                             _uniqueness_seen.add((num, noun))
-                            issues.append(_uniqueness_warning(num, t['surf'], noun, bare))
+                            if same_claim_dup:
+                                issues.append(_uniqueness_warning_same_claim(
+                                    num, t['surf'], noun, len(same_claim_defined[noun]),
+                                    bare if len(bare) > 1 else None))
+                            else:
+                                issues.append(_uniqueness_warning(num, t['surf'], noun, bare))
                         # 早いものがち：群（複数のN）が先行しているのに裸照応
                         if (first_seen_as_plural.get(noun) is True
                                 and (num, noun) not in _plural_intro_seen):
                             _plural_intro_seen.add((num, noun))
                             issues.append(_plural_intro_warning(num, t['surf'], noun))
                         # 後付け修飾節：先行詞が既に一意なのに「前記Aが〜した前記B」で修飾している
-                        if len(direct_parents) <= 1 and len(bare) <= 1:
+                        if len(direct_parents) <= 1 and len(bare) <= 1 and not same_claim_dup:
                             _mod_start = _redundant_modifier_clause_start(tokens, i)
                             if _mod_start is not None:
                                 mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
@@ -654,6 +725,13 @@ def check_zenshou(claims, dep_map):
                 if _verb_origin and (num, noun, 'verb_origin') not in _uniqueness_seen:
                     _uniqueness_seen.add((num, noun, 'verb_origin'))
                     issues.append(_verb_origin_suggestion(num, t['surf'], noun))
+                # 同一請求項内でnounが照応詞なしで複数回導入されていないか
+                # （唯一性崩壊の請求項内版。上のブロックと同じロジック）
+                same_claim_defined = _collect_defined_nouns(tokens[:i])
+                same_claim_dup = (len(same_claim_defined.get(noun, [])) > 1
+                                   and not _preceding_clause_disambiguates(tokens, i)
+                                   and not _followed_by_distributive_marker(
+                                       body, noun_start + len(noun)))
                 if len(direct_parents) > 1:
                     # 多項従属: 各親スコープで独立して唯一性を評価。
                     # 「請求項3又は4に記載の〜」は一方を選べば必ず一意なので、
@@ -668,18 +746,23 @@ def check_zenshou(claims, dep_map):
                 else:
                     anc_body_toks = {a: claim_body_items[a] for a in ancestors if a in claim_body_items}
                     bare = _bare_claims_tokenized(noun, anc_body_toks, claim_defined_nouns)
-                    if noun in _collect_defined_nouns(tokens[:i]):
+                    if noun in same_claim_defined:
                         bare.add(num)
-                if len(bare) > 1 and (num, noun) not in _uniqueness_seen:
+                if (len(bare) > 1 or same_claim_dup) and (num, noun) not in _uniqueness_seen:
                     _uniqueness_seen.add((num, noun))
-                    issues.append(_uniqueness_warning(num, t['surf'], noun, bare))
+                    if same_claim_dup:
+                        issues.append(_uniqueness_warning_same_claim(
+                            num, t['surf'], noun, len(same_claim_defined[noun]),
+                            bare if len(bare) > 1 else None))
+                    else:
+                        issues.append(_uniqueness_warning(num, t['surf'], noun, bare))
                 # 早いものがち：群（複数のN）が先行しているのに裸照応
                 if (first_seen_as_plural.get(noun) is True
                         and (num, noun) not in _plural_intro_seen):
                     _plural_intro_seen.add((num, noun))
                     issues.append(_plural_intro_warning(num, t['surf'], noun))
                 # 後付け修飾節：先行詞が既に一意なのに「前記Aが〜した前記B」で修飾している
-                if len(direct_parents) <= 1 and len(bare) <= 1:
+                if len(direct_parents) <= 1 and len(bare) <= 1 and not same_claim_dup:
                     _mod_start = _redundant_modifier_clause_start(tokens, i)
                     if _mod_start is not None:
                         mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
