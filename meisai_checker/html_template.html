@@ -306,6 +306,7 @@ mark.hl-target{background:rgba(56,132,245,.18);color:inherit;border-radius:2px;p
     <div id="zoom-indicator" style="font-family:var(--mono);font-size:10px;padding:2px 6px;color:var(--ink3);user-select:none" title="Ctrl+スクロールでフォントサイズ変更">🔍 <span id="zoom-pct">100%</span></div>
     <button class="hb hb-off" id="ontop-btn" title="常に前面表示" onclick="toggleOnTop()" style="font-size:10px;padding:2px 8px;cursor:pointer">📌 前面固定</button>
     <button class="hb hb-off" id="copy-btn" title="結果をMarkdownでコピー" onclick="copyResultsMarkdown()" style="font-size:10px;padding:2px 8px;cursor:pointer;display:none">📋 コピー</button>
+    <button class="hb hb-off" id="copy-claims-btn" title="請求項に関するチェック結果のみMarkdownでコピー" onclick="copyResultsMarkdown(true)" style="font-size:10px;padding:2px 8px;cursor:pointer;display:none">📋 クレームのみ</button>
     <button class="hb hb-off" id="download-btn" title="結果をテキストファイルで保存" onclick="downloadResultsTxt()" style="font-size:10px;padding:2px 8px;cursor:pointer;display:none">💾 保存</button>
     <button class="hb hb-off" id="hide-ok-btn" title="合格（OK）項目を非表示／表示" onclick="toggleHideOk()" style="font-size:10px;padding:2px 8px;cursor:pointer;display:none">OK非表示</button>
     <button class="hb hb-off" id="debug-btn" title="デバッグログ" onclick="toggleDebugPanel()" style="font-size:10px;padding:2px 6px;cursor:pointer">🐛</button>
@@ -447,6 +448,7 @@ function showInputPanel() {
   document.getElementById('viewer-empty').style.display = 'flex';
   document.getElementById('block-area').style.display = 'none';
   document.getElementById('copy-btn').style.display = 'none';
+  document.getElementById('copy-claims-btn').style.display = 'none';
   document.getElementById('download-btn').style.display = 'none';
   document.getElementById('hide-ok-btn').style.display = 'none';
   document.getElementById('stats-row').style.display = 'none';
@@ -518,6 +520,7 @@ function runAnalyzeFromText(text) {
     (d.blocks || []).forEach(function(b) { G.blockMap[b.id] = b; });
     renderAll(d);
     document.getElementById('copy-btn').style.display = '';
+    document.getElementById('copy-claims-btn').style.display = '';
     document.getElementById('download-btn').style.display = '';
     document.getElementById('hide-ok-btn').style.display = '';
   }).catch(function(e) {
@@ -671,11 +674,12 @@ function openFileDialog() {
 }
 
 // ── 結果をMarkdownでコピー ──
-function copyResultsMarkdown() {
+// claimsOnly=true: 請求項に関するチェック結果（iss.claim が設定されているもの）のみに絞る
+function copyResultsMarkdown(claimsOnly) {
   if (!G.data) return;
   var d = G.data;
   var lines = [];
-  lines.push('# 特許明細書チェック結果');
+  lines.push('# 特許明細書チェック結果' + (claimsOnly ? '（請求項のみ）' : ''));
   lines.push('');
   if (d.title) lines.push('**発明の名称**: ' + d.title);
   var s = d.stats || {};
@@ -686,9 +690,12 @@ function copyResultsMarkdown() {
   var labels = {m2:'M2 従属関係',m3:'M3 前記・当該',m4:'M4 符号',
                 m5:'M5 構造',m6:'M6 サポート要件',m7:'M7 係り受け曖昧性',
                 m8:'M8 記録項目',m9:'M9 願書',tc:'TC 文章形式',g1:'G1 助詞'};
+  var any = false;
   mids.forEach(function(mid) {
     var issues = (d.issues || {})[mid] || [];
+    if (claimsOnly) issues = issues.filter(function(iss) { return !!iss.claim; });
     if (!issues.length) return;
+    any = true;
     lines.push('## ' + (labels[mid] || mid));
     issues.forEach(function(iss) {
       var lv = iss.level === 'error' ? '🔴' : iss.level === 'warning' ? '🟡' : '🔵';
@@ -697,11 +704,13 @@ function copyResultsMarkdown() {
     });
     lines.push('');
   });
+  if (claimsOnly && !any) lines.push('（請求項に関する指摘はありません）');
 
   var md = lines.join('\n');
+  var btnId = claimsOnly ? 'copy-claims-btn' : 'copy-btn';
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(md).then(function() {
-      var btn = document.getElementById('copy-btn');
+      var btn = document.getElementById(btnId);
       var orig = btn.textContent;
       btn.textContent = '✓ コピーしました';
       setTimeout(function() { btn.textContent = orig; }, 2000);
