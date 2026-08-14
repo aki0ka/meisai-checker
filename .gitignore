@@ -18,6 +18,9 @@ venv/
 env/
 ENV/
 
+# uv（Desktop venv権限問題時の代替実行手段。正式な依存管理はDesktop venv側）
+uv.lock
+
 # PyInstaller
 *.spec.bak
 dist/

@@ -24,10 +24,14 @@ _CONNECTIVES = [
     '例えば',
 ]
 
-# 接続語句の後に読点がないパターン（文の先頭または句点直後）
+# 接続語句検出パターン（文の先頭または句点直後）
 # キャプチャグループ 1: 接続語句
+# 注：読点の有無チェックは正規表現に含めず後続処理で行う。含めると
+#     「しかしながら、」で長い方（しかしながら）が読点直後判定に失敗した際、
+#     エンジンが同じ開始位置で短い方（しかし）にバックトラックして
+#     誤マッチする（「それでも」「それで」も同様の関係）。
 _CONNECTIVE_PAT = re.compile(
-    r'(?:(?:^|。))(' + '|'.join(re.escape(c) for c in _CONNECTIVES) + r')([^、。\n])'
+    r'(?:(?:^|。))(' + '|'.join(re.escape(c) for c in _CONNECTIVES) + r')'
 )
 
 # ── 5-3: 原因・理由・条件節の後に読点がないパターン
@@ -92,7 +96,10 @@ def check_punctuation(sections):
         # 5-2: 接続語句の後に読点なし
         for match in _CONNECTIVE_PAT.finditer(body):
             conn = match.group(1)
-            snippet = body[max(0, match.start() - 5):match.end() + 20].strip()
+            next_pos = match.end()
+            if next_pos >= len(body) or body[next_pos] in '、。\n':
+                continue
+            snippet = body[max(0, match.start() - 5):next_pos + 20].strip()
             key = ('TC7a', current_para, conn, snippet[:15])
             if key in seen:
                 continue
