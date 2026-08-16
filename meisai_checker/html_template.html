@@ -728,6 +728,47 @@ function copyResultsMarkdown(claimsOnly) {
   }
 }
 
+// ── 照応詞一覧をプレーンテキストでコピー ──
+// テーブルをブラウザの選択→コピーに任せると、貼り付け先（Obsidian等）が
+// HTMLテーブルをMarkdownテーブルに変換する際にセル内容を取りこぼし、
+// パイプ「|」と空白だけが残る場合がある。DOM上の値から明示的にテキストを
+// 組み立てて渡すことで、貼り付け先の変換に依存せず確実にコピーする。
+function copyM23List(btn) {
+  var body = document.getElementById('m23-bot-body');
+  if (!body) return;
+  var rows = body.querySelectorAll('tr.m3-row');
+  var lines = ['先行詞-照応\t照応詞\t状態'];
+  rows.forEach(function(tr) {
+    var cells = tr.querySelectorAll('td');
+    if (cells.length < 3) return;
+    var vals = Array.prototype.map.call(cells, function(td) {
+      return (td.textContent || '').trim();
+    });
+    lines.push(vals.join('\t'));
+  });
+  var text = lines.join('\n');
+
+  var done = function() {
+    if (!btn) return;
+    var orig = btn.textContent;
+    btn.textContent = '✓ コピーしました';
+    setTimeout(function() { btn.textContent = orig; }, 2000);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done);
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    done();
+  }
+}
+
 // ── 結果をテキストファイルとして保存 ──
 function downloadResultsTxt() {
   if (!G.data) return;
@@ -1034,8 +1075,17 @@ function buildM23Tab(con, d) {
   botDiv.style.cssText = 'flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0';
 
   var botHead = document.createElement('div');
-  botHead.style.cssText = 'padding:5px 10px;font-size:10px;font-family:var(--mono);color:var(--ink3);border-bottom:1px solid var(--border);flex-shrink:0';
-  botHead.textContent = '照応詞一覧';
+  botHead.style.cssText = 'padding:5px 10px;font-size:10px;font-family:var(--mono);color:var(--ink3);border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:space-between';
+  var botHeadLabel = document.createElement('span');
+  botHeadLabel.textContent = '照応詞一覧';
+  var botCopyBtn = document.createElement('button');
+  botCopyBtn.className = 'hb hb-off';
+  botCopyBtn.title = '照応詞一覧をテキストでコピー';
+  botCopyBtn.style.cssText = 'font-size:10px;padding:1px 8px;cursor:pointer';
+  botCopyBtn.textContent = '📋 コピー';
+  botCopyBtn.addEventListener('click', function() { copyM23List(botCopyBtn); });
+  botHead.appendChild(botHeadLabel);
+  botHead.appendChild(botCopyBtn);
 
   var botBody = document.createElement('div');
   botBody.id = 'm23-bot-body';

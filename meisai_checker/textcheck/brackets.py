@@ -50,9 +50,16 @@ def _check_balance(text, block_label, open_c, close_c):
             "detail": f"位置 {first_excess_close}：...{text[max(0,first_excess_close-5):first_excess_close+5]}...",
         }
     if depth > 0:
+        hint = ""
+        # 全角丸括弧が閉じられていない場合、半角の閉じ括弧 ")" が
+        # 誤って使われている可能性を確認する（全角開始・半角閉じの混在）
+        if open_c == '（' and close_c == '）':
+            stray_close = text.count(')') - text.count('(')
+            if stray_close > 0:
+                hint = "（全角「（」に対して半角「)」で閉じている可能性があります）"
         return {
             "milestone": "TC1", "level": "warning",
-            "msg": f"【{block_label}】括弧「{open_c}」が閉じられていません（{depth}個未閉）",
+            "msg": f"【{block_label}】括弧「{open_c}」が閉じられていません（{depth}個未閉）{hint}",
             "detail": text.strip()[-40:] if len(text.strip()) > 40 else text.strip(),
         }
     return None
