@@ -73,6 +73,20 @@ def _is_no_tok(t):
     """助詞「の」"""
     return t['pos'] == '助詞' and t['surf'] == 'の'
 
+def _is_verb_noun_bridge_start(tokens, i):
+    """tokens[i] が名詞句の先頭に立ちうる動詞連用形かどうか判定。
+
+    「噛み合いギヤ」「位置決め工程」のように、連用形名詞化した語が
+    UniDicでは動詞（一般・連用形）としてタグ付けされ、直後に名詞が
+    続く場合は複合名詞の一部とみなす。連体形（「当接する背面」等）は
+    関係節の述語であり複合語ではないため対象外。
+    """
+    n = len(tokens)
+    t = tokens[i]
+    return (t['pos'] == '動詞' and t['pos1'] == '一般'
+            and not t['cform'].startswith('連体形')
+            and i + 1 < n and _is_noun_tok(tokens[i + 1]))
+
 # 限定詞：これらの直後に「の＋名詞句」が続くとき全体を名詞句として取り込む
 # 例：複数の検知部、一方の端部、他の装置、それぞれの素子
 # 範囲接尾語：名詞句の末尾境界として扱う（「閾値以上」→「閾値」で停止）
@@ -392,13 +406,17 @@ def _noun_span(tokens, start_idx):
             span.append(t)
             i += 1
         elif (t['pos'] == '動詞' and t['pos1'] == '一般'
-              and span and i + 1 < n and _is_noun_tok(tokens[i + 1])
+              and i + 1 < n and _is_noun_tok(tokens[i + 1])
               and not t['cform'].startswith('連体形')):
             # 動詞連用形が名詞列に挟まれた複合語（位置決め工程・孔あけ工程等）
             # 連体形（「当接する背面」の「接する」等）は関係節の述語であり
             # 複合語ではないため対象外（MeCabが「当接する」を「当」+「接する」
             # のように未知複合動詞を既知の断片へ分割した際、この動詞ブリッジが
             # 誤って断片と後続名詞まで一体で先行詞に取り込んでしまうのを防ぐ）
+            # span が空（=このトークンが名詞句の先頭）でも許容する：
+            # 「噛み合いギヤ」のように連用形名詞化した語がUniDicで動詞タグに
+            # なる場合、複合語の先頭に立つことがあるため（実機バグ報告：
+            # 「前記噛み合いギヤ」の先行詞がスコープ内に見つからないと誤検知）。
             span.append(t)
             i += 1
         else:
@@ -467,7 +485,8 @@ def _find_dearu_defs(tokens):
             and not all('゠' <= c <= 'ヿ' for c in t['surf'])
             and i + 1 < n and _is_noun_tok(tokens[i + 1])
         )
-        if _is_noun_tok(t) or _is_kata_keijo or _is_keijo_noun_prefix:
+        if (_is_noun_tok(t) or _is_kata_keijo or _is_keijo_noun_prefix
+                or _is_verb_noun_bridge_start(tokens, i)):
             span = _noun_span(tokens, i)
             if not span:
                 i += 1
@@ -600,7 +619,8 @@ def _collect_defined_nouns(tokens) -> dict[str, list['Occurrence']]:
             and not all('゠' <= c <= 'ヿ' for c in t['surf'])
             and i + 1 < n and _is_noun_tok(tokens[i + 1])
         )
-        if _is_noun_tok(t) or _is_kata_keijo or _is_keijo_noun_prefix:
+        if (_is_noun_tok(t) or _is_kata_keijo or _is_keijo_noun_prefix
+                or _is_verb_noun_bridge_start(tokens, i)):
             if i in dearu_genus_starts:
                 span = _noun_span(tokens, i)
                 i += len(span) if span else 1
@@ -883,7 +903,7 @@ def _scan_first_seen_as_plural(tokens):
             i = i + 2 + (len(span) if span else 1)
             continue
         # 通常の名詞句（裸名詞としての登場）
-        if _is_noun_tok(t):
+        if _is_noun_tok(t) or _is_verb_noun_bridge_start(tokens, i):
             span = _noun_span(tokens, i)
             s = _span_to_str(span)
             if len(s) >= 2 and s not in result:
