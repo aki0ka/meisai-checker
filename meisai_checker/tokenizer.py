@@ -83,9 +83,30 @@ def _is_verb_noun_bridge_start(tokens, i):
     """
     n = len(tokens)
     t = tokens[i]
-    return (t['pos'] == '動詞' and t['pos1'] == '一般'
+    if (t['pos'] == '動詞' and t['pos1'] == '一般'
             and not t['cform'].startswith('連体形')
-            and i + 1 < n and _is_noun_tok(tokens[i + 1]))
+            and i + 1 < n and _is_noun_tok(tokens[i + 1])):
+        return True
+    return _causative_bridge_len(tokens, i) > 0
+
+def _causative_bridge_len(tokens, i):
+    """tokens[i] から「動詞未然形＋助動詞せ（せる）」の使役ブリッジが
+    始まり、直後に名詞が続く場合にその長さ（常に2）を返す。該当しなければ0。
+
+    「噛み合わせ歯車」のように、連用形名詞化語がさらに周辺文脈次第で
+    「噛み合わ（未然形）＋せ（助動詞・せる連用形）」に分割されることが
+    あり（UniDicのViterbi解析が前後の語で揺れるため）、この2トークンを
+    まとめて複合名詞の先頭として扱う必要がある。
+    """
+    n = len(tokens)
+    if (i + 2 < n
+            and tokens[i]['pos'] == '動詞' and tokens[i]['pos1'] == '一般'
+            and tokens[i]['cform'].startswith('未然形')
+            and tokens[i + 1]['pos'] == '助動詞' and tokens[i + 1]['base'] == 'せる'
+            and tokens[i + 1]['cform'].startswith('連用形')
+            and _is_noun_tok(tokens[i + 2])):
+        return 2
+    return 0
 
 # 限定詞：これらの直後に「の＋名詞句」が続くとき全体を名詞句として取り込む
 # 例：複数の検知部、一方の端部、他の装置、それぞれの素子
@@ -405,6 +426,11 @@ def _noun_span(tokens, start_idx):
         elif t['pos'] == '記号' and t['surf'] in ('・', '／'):
             span.append(t)
             i += 1
+        elif _causative_bridge_len(tokens, i):
+            # 使役ブリッジ（噛み合わせ＝噛み合わ＋せ）：2トークンまとめて継続
+            span.append(t)
+            span.append(tokens[i + 1])
+            i += 2
         elif (t['pos'] == '動詞' and t['pos1'] == '一般'
               and i + 1 < n and _is_noun_tok(tokens[i + 1])
               and not t['cform'].startswith('連体形')):
