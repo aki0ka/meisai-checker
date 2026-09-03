@@ -41,6 +41,7 @@ _JPO_AMBIGUOUS_NG_CHARS = {
     0x00A2: ('￠', 0xFFE0),  # セント記号（本来） → セント記号（全角）
     0x00A3: ('￡', 0xFFE1),  # ポンド記号（本来） → ポンド記号（全角）
     0x00AC: ('￢', 0xFFE2),  # 否定記号（本来） → 否定記号（全角）
+    0x25EF: ('○', 0x25CB),  # 大きな丸（LARGE CIRCLE） → 白丸（WHITE CIRCLE）
 }
 
 
