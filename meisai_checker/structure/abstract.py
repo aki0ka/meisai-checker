@@ -21,10 +21,14 @@ def check_abstract(sections):
         })
         return issues
 
-    # 段落番号・見出し行・(57)プレフィックス等を除いた本文文字数
-    text_only = re.sub(r'【[^】]+】', '', ab)          # 見出し除去
-    text_only = re.sub(r'^\s*\(\d+\)', '', text_only)   # (57)等除去
-    text_only = re.sub(r'\s', '', text_only)             # 空白除去
+    # 電子出願ソフトの文字数カウントに合わせる：
+    # 【要約】／【書類名】要約書 の書類名見出し行のみ除外し、【課題】【解決手段】等の
+    # 本文中の見出しはそのまま文字数に含める（公報上も本文として印刷されるため）。
+    lines = ab.splitlines()
+    body_start = 1 if lines and re.search(r'【要約】|【書類名】[\s　]*要約書', lines[0]) else 0
+    text_only = ''.join(lines[body_start:])
+    text_only = re.sub(r'^\s*\(\d+\)', '', text_only)   # (57)等の先頭プレフィックス除去
+    text_only = re.sub(r'\s', '', text_only)             # 空白・改行除去
     char_count = len(text_only)
 
     if char_count > 400:
