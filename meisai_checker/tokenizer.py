@@ -85,9 +85,36 @@ def _is_verb_noun_bridge_start(tokens, i):
     t = tokens[i]
     if (t['pos'] == '動詞' and t['pos1'] == '一般'
             and not t['cform'].startswith('連体形')
+            and not _is_functional_verb_phrase(tokens, i)
             and i + 1 < n and _is_noun_tok(tokens[i + 1])):
         return True
     return _causative_bridge_len(tokens, i) > 0
+
+# 複合助詞（「〜により」「〜に基づき」「〜を介し」等）を構成する機能動詞。
+# 直前の格助詞とセットで一つの助詞相当句をなすため、直後の名詞と複合語を
+# 作ることはない。「無線通信部により間欠受信を…」の「間欠受信」が
+# 「より間欠受信」に飲み込まれるのを防ぐ。
+_FUNC_VERB_BASES = {
+    '因る', '由る', '基づく', '基く', '介する', '応ずる', '応じる',
+    '関する', '対する', '伴う', '従う', '沿う', '即する', '則する',
+    '際する', '亘る', '拠る', '限る', '向ける', '通ずる', '通じる',
+    '当たる', '当る', '先立つ',
+}
+
+
+def _is_functional_verb_phrase(tokens, i):
+    """tokens[i] が「格助詞＋機能動詞」型の複合助詞の一部かどうか。
+
+    「〜に|より」「〜に|基づき」「〜を|介し」のように、直前が格助詞で
+    かつ動詞が機能動詞である場合は複合助詞であり、複合名詞の先頭には
+    ならない。直前の格助詞を条件に加えることで、「第1歯車と噛み合いギヤ」
+    のような真の連用形名詞化語（「噛み合う」等）には影響しない。
+    """
+    if i == 0:
+        return False
+    prev = tokens[i - 1]
+    return (prev['pos'] == '助詞' and prev['pos1'] == '格助詞'
+            and tokens[i]['base'] in _FUNC_VERB_BASES)
 
 def _causative_bridge_len(tokens, i):
     """tokens[i] から「動詞未然形＋助動詞せ（せる）」の使役ブリッジが

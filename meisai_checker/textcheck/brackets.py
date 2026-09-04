@@ -29,10 +29,29 @@ _CLAIM_PAT = re.compile(
     re.DOTALL)
 
 
+def _mask_other_pairs(text, keep_pair):
+    """検査対象外の括弧ペアで囲まれた「括弧内」を伏せ字化する。
+
+    括弧内には、括弧記号そのものを記述したり（例:「（」は開き括弧を表す）、
+    対応の取れていない原文断片を引用したりすることがある。バランス検査は
+    地の文に対して行うべきなので、他ペアで閉じられた区間を除去してから
+    検査する。
+    """
+    for open_c, close_c in _BRACKET_PAIRS:
+        if (open_c, close_c) == keep_pair:
+            continue
+        pat = (re.escape(open_c)
+               + r'[^' + re.escape(open_c + close_c) + r']*'
+               + re.escape(close_c))
+        text = re.sub(pat, '', text)
+    return text
+
+
 def _check_balance(text, block_label, open_c, close_c):
     """テキスト内の open_c / close_c のバランスをチェック。
     不整合があれば issue dict を返す。
     """
+    text = _mask_other_pairs(text, (open_c, close_c))
     depth = 0
     first_excess_close = None
     for i, c in enumerate(text):

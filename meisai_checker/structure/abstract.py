@@ -10,6 +10,17 @@ from __future__ import annotations
 import re
 
 
+# 要約欄の見出し行（文字数に算入しない）。
+# 公報形式の「(57)【要約】」「(57)【要約】（修正有）」も見出しとして扱う。
+_ABSTRACT_HEAD_PAT = re.compile(
+    r'^(?:\(\d+\))?[\s　]*(?:【書類名】[\s　]*要約書|【要約】)'
+    r'(?:[\s　]*（修正有）)?')
+# 【選択図】は要約欄の外（文字数に算入しない）
+_SENTAKUZU_PAT = re.compile(r'^【選択図】')
+# 公報のページ番号行（000002 等）は本文ではない
+_PAGENUM_PAT = re.compile(r'^\d{4,}$')
+
+
 def check_abstract(sections):
     """要約の文字数・必須項目をチェック。"""
     issues = []
@@ -22,11 +33,19 @@ def check_abstract(sections):
         return issues
 
     # 電子出願ソフトの文字数カウントに合わせる：
-    # 【要約】／【書類名】要約書 の書類名見出し行のみ除外し、【課題】【解決手段】等の
-    # 本文中の見出しはそのまま文字数に含める（公報上も本文として印刷されるため）。
-    lines = ab.splitlines()
-    body_start = 1 if lines and re.search(r'【要約】|【書類名】[\s　]*要約書', lines[0]) else 0
-    text_only = ''.join(lines[body_start:])
+    #   除外 … 【書類名】要約書・【要約】の見出し、【選択図】以降
+    #   算入 … 【課題】【解決手段】等の本文中の見出し
+    #          （公報上も要約欄の本文として印刷されるため）
+    body = []
+    for line in ab.splitlines():
+        s = line.strip()
+        if _SENTAKUZU_PAT.match(s):
+            break                                    # 【選択図】以降は要約欄外
+        if _PAGENUM_PAT.match(s):
+            continue                                 # 公報のページ番号行
+        s = _ABSTRACT_HEAD_PAT.sub('', s, count=1)   # 見出し自体は算入しない
+        body.append(s)
+    text_only = ''.join(body)
     text_only = re.sub(r'^\s*\(\d+\)', '', text_only)   # (57)等の先頭プレフィックス除去
     text_only = re.sub(r'\s', '', text_only)             # 空白・改行除去
     char_count = len(text_only)
