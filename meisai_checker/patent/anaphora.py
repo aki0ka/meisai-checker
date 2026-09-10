@@ -466,13 +466,6 @@ def check_zenshou(claims, dep_map):
     # _scope_tokens_for_parent の結果キャッシュ
     _scope_toks_cache: dict[int, list] = {}
 
-    # 早いものがち戦略：特許請求の範囲全体を文字列順（請求項番号順）に走査し、
-    # 各核名詞の初出時の量化子状態（複数のN が先か裸 N が先か）を記録する。
-    # noun -> True（複数のN が先行）/ False（裸 N が先行）
-    _scope_tokens_all = []
-    for _n in sorted(claims.keys()):
-        _scope_tokens_all += claim_tokens[_n]
-    first_seen_as_plural = _scan_first_seen_as_plural(_scope_tokens_all)
     _plural_intro_seen = set()  # (claim_num, noun) — 群先行警告の重複排除
 
     for num in sorted(claims.keys()):
@@ -538,6 +531,14 @@ def check_zenshou(claims, dep_map):
         ancestor_tokens = []
         for a in sorted(ancestors):
             ancestor_tokens += claim_tokens.get(a, [])
+
+        # 早いものがち戦略：この請求項の実際のスコープ（祖先請求項＋自請求項）
+        # の中でのみ、各核名詞の初出時の量化子状態（複数のN が先か裸 N が先か）
+        # を判定する。請求項番号順の全体走査だと、無関係な独立請求項が先に
+        # 「複数のN」を導入しただけで、別の独立請求項の裸「前記N」まで
+        # 群先行警告になってしまう（例：請求項1「複数の回線」導入後、
+        # 独立した請求項2で「回線」を単数導入しても誤って群参照扱いされる）。
+        first_seen_as_plural = _scan_first_seen_as_plural(ancestor_tokens + tokens)
 
         for i, t in enumerate(tokens):
             if t['surf'] not in _ZENSHOU_WORDS:
