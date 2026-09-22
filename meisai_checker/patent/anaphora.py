@@ -205,13 +205,18 @@ def _loc_compound_hint(noun, scope_tokens):
     return None, None
 
 
+def _each_prefixed(noun):
+    """「各」を冠する名詞句を返す。nounが既に「各」で始まる場合は二重に付けない。"""
+    return noun if noun.startswith('各') else f'各{noun}'
+
+
 def _uniqueness_warning(num, surf, noun, bare_claims):
     return {
         'claim': num, 'level': 'warning',
         'word': surf, 'noun': noun,
         'msg': (f"請求項{num}：「{surf}{noun}」の先行詞が"
                 f"複数の請求項（{sorted(bare_claims)}）に存在します（先行詞重複）。"
-                f"各{noun}に固有の名称を付与することを検討してください。"),
+                f"{_each_prefixed(noun)}に固有の名称を付与することを検討してください。"),
     }
 
 
@@ -230,7 +235,7 @@ def _uniqueness_warning_same_claim(num, surf, noun, count, extra_claims=None):
         'word': surf, 'noun': noun,
         'msg': (f"請求項{num}：「{surf}{noun}」の先行詞が同一請求項内に{count}箇所存在し、"
                 f"どちらを指すか特定できません（先行詞重複）。{extra}"
-                f"各{noun}に固有の名称を付与することを検討してください。"),
+                f"{_each_prefixed(noun)}に固有の名称を付与することを検討してください。"),
     }
 
 
