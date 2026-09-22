@@ -760,6 +760,29 @@ def check_zenshou(claims, dep_map):
                         issues.append(_plural_intro_warning(num, t['surf'], noun))
                     suppressed = True
 
+                # 「前記各X」: 「各」は前記と違い先行詞（談話参照点）を要求しない
+                # 量化子で、核名詞Xの外延から自前でドメインを調達できる。核名詞Xが
+                # スコープ内で定義済み（複数のX・裸のX・数詞X等）であれば、
+                # 「前記各X」はその確立済みドメインを指す正当な参照として扱う
+                # （「前記各X」を検出する専用ルールが無く、字面一致頼みで
+                #  「先行詞なし」誤エラーになっていたのを修正：特許7919105等で発見）。
+                if (not suppressed and t['surf'] not in _TOUGAI_WORDS
+                        and noun.startswith('各') and len(noun) > 1):
+                    _core = noun[1:]
+                    if first_seen_as_plural.get(_core) is True:
+                        suppressed = True
+                    elif _found_in_scope(_core, prefix):
+                        suppressed = True
+                    elif len(direct_parents) <= 1 and _found_in_scope(_core, ancestor_tokens):
+                        suppressed = True
+                    elif len(direct_parents) > 1 and any(
+                            _found_in_scope(
+                                _core,
+                                _scope_tokens_for_parent(
+                                    p, dep_map, claim_tokens, _cache, _scope_toks_cache))
+                            for p in direct_parents):
+                        suppressed = True
+
                 if not suppressed and t['surf'] in _TOUGAI_WORDS:
                     # ⑤ 先行詞が親請求項に存在 → WARN（前記推奨）
                     if _found_in_scope(noun, ancestor_tokens):

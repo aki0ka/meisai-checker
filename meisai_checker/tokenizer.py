@@ -764,6 +764,11 @@ def _collect_distributive_refs(tokens) -> dict[str, list['Occurrence']]:
                     or (_k + 1 < n and tokens[_k]['pos'] == '接尾辞'
                         and tokens[_k]['surf'] in _ITER_DISTRIBUTIVE_SUFFIXES
                         and tokens[_k + 1]['surf'] == 'に')
+                    # 「前記各X」（接頭辞型）も分配を明示済みとして扱う。
+                    # 当該・該は同一請求項スコープに閉じるため対象外のまま。
+                    or (t['surf'] not in _TOUGAI_WORDS
+                        and skip_span[0]['surf'] == '各'
+                        and skip_span[0]['pos'] == '接頭辞')
                 )
                 if _ref_distributive:
                     _ref_key = _span_to_str(skip_span)
