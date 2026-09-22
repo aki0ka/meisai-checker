@@ -1126,8 +1126,19 @@ def _found_in_scope_ex(noun, scope_tokens, plural_map=None, allow_modifier_bridg
             _has_plural_domain = _plural_map.get(noun, False)
             if not _sukunakutomo and _has_plural_domain:
                 continue
+        # 「Ｎ以上の」「Ｎつ以上の」等（_RANGE_SUFFIXES）も同様に核名詞単独照応を
+        # 許容する。「２以上のセンサ」「１つ以上のセンサ」→「前記センサ」。
+        _range_tail = (
+            len(prefix_toks) >= 2 and prefix_toks[-1]['surf'] in _RANGE_SUFFIXES
+        )
         if ((len(prefix_toks) == 1 and prefix_toks[0]['pos1'] == '数詞')
                 or (len(prefix_toks) == 2
+                    and prefix_toks[0]['pos1'] == '数詞'
+                    and prefix_toks[1]['pos'] == '接尾辞'
+                    and prefix_toks[1]['pos1'] == '名詞的')
+                or (_range_tail and len(prefix_toks) == 2
+                    and prefix_toks[0]['pos1'] == '数詞')
+                or (_range_tail and len(prefix_toks) == 3
                     and prefix_toks[0]['pos1'] == '数詞'
                     and prefix_toks[1]['pos'] == '接尾辞'
                     and prefix_toks[1]['pos1'] == '名詞的')):
