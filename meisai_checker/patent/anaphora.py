@@ -395,6 +395,75 @@ def _followed_by_distributive_marker(body, noun_end_pos):
     return bool(_DISTRIB_TAIL_PAT.search(body[noun_end_pos:noun_end_pos + 40]))
 
 
+# 「前記Xの各々」等、照応済み名詞句に後置で分配をかける表現
+_POST_DISTRIB_PAT = re.compile(r'^の(?:それぞれ|各々|おのおの|すべて|全て)')
+# 並列の後半（「前記Aおよび前記Bのそれぞれ」）は並列全体への分配なので対象外
+_COORD_BEFORE_PAT = re.compile(r'(?:および|及び|並びに|ならびに|又は|または|若しくは|もしくは|と|や)$')
+# 導入名詞句の先頭に付いた量化子（「複数の」「２つの」「１つ以上の」「一対の」等）
+_INTRO_QUANT_PAT = re.compile(
+    r'^(?:複数|多数|各|それぞれ|全て|すべて|全部|一対|両|一又は複数|１又は複数|少なくとも.*'
+    r'|[0-9０-９一二三四五六七八九十]+[つ個本枚台対組]?(?:以上)?)の?$'
+)
+# 導入名詞句の後置数量詞（「組み合わせを、１以上含み」「Xを複数備え」）
+_FLOAT_QUANT_PAT = re.compile(
+    r'^[をがはも]、?(?:複数|多数|少なくとも|[0-9０-９一二三四五六七八九十]+(?:つ|個|本|枚|台|以上))'
+)
+# 導入節内の分配語（「複数の筐体のそれぞれに収容された検査装置」）
+_DISTRIB_WORDS_IN_CLAUSE = {'それぞれ', '各々', 'おのおの', 'ごと', '毎'}
+
+
+def _post_distrib_cardinality_issue(num, surf, noun, scope_tokens):
+    """「前記Xの各々」の先行詞Xが単数（数の宣言なし）で導入されていないかを判定する。
+
+    戻り値: issue dict（問題なしなら None）
+      - Xが「複数のX」「２つのX」等で導入済み、または裸で複数回導入 → None
+      - Xの導入節に分配語がある（「複数の筐体のそれぞれに収容された検査装置」）
+        → info：Xが複数かどうかは述語の意味（収容＝一つの筐体にしか入れない等）
+          次第で、字面からは決まらない
+      - それ以外 → warning：単数で導入したXに分配をかけている
+    """
+    # 参照側自体に量化子がある（「前記２つのXのそれぞれ」）→ 数は宣言済み
+    if 'の' in noun and _INTRO_QUANT_PAT.match(noun[:noun.index('の') + 1]):
+        return None
+    defined = _collect_defined_nouns(scope_tokens)
+    bare = defined.get(noun, [])
+    if len(bare) != 1:
+        return None
+    for key in defined:
+        if key != noun and key.endswith(noun) and _INTRO_QUANT_PAT.match(key[:-len(noun)]):
+            return None
+    pos = bare[0].position
+    span = _noun_span(scope_tokens, pos) or [scope_tokens[pos]]
+    after = ''.join(t['surf'] for t in scope_tokens[pos + len(span):pos + len(span) + 6])
+    if _FLOAT_QUANT_PAT.match(after):
+        return None
+    k = pos - 1
+    dependent = False
+    while k >= 0 and scope_tokens[k]['pos'] != '補助記号':
+        tk = scope_tokens[k]
+        if tk['surf'] in _DISTRIB_WORDS_IN_CLAUSE or (tk['surf'] == '各' and tk.get('pos') == '接頭辞'):
+            dependent = True
+            break
+        k -= 1
+    if dependent:
+        return {
+            'claim': num, 'level': 'info',
+            'word': surf, 'noun': noun,
+            'msg': (f"請求項{num}：「{surf}{noun}」は分配の中で導入されており、"
+                    f"数が明示されていません。複数かどうかは述語の意味次第です"
+                    f"（「複数の筐体のそれぞれに収容されたX」なら筐体ごとに別のX、"
+                    f"「複数の筐体のそれぞれを検査するX」なら１つのXでもよい）。"
+                    f"複数の意図であれば「複数の{noun}」として導入することを検討してください。"),
+        }
+    return {
+        'claim': num, 'level': 'warning',
+        'word': surf, 'noun': noun,
+        'msg': (f"請求項{num}：「{noun}」は数を示さずに（単数として）導入されていますが、"
+                f"「{surf}{noun}」に後置の分配（の各々・のそれぞれ等）がかかっています。"
+                f"複数の意図であれば「複数の{noun}」として導入してください。"),
+    }
+
+
 def _redundant_modifier_warning(num, surf, noun, mod_text):
     return {
         'claim': num, 'level': 'info',
@@ -602,6 +671,19 @@ def check_zenshou(claims, dep_map):
                         f"または先行詞を「複数の{noun}」として導入してください。"
                     ),
                 })
+
+            # 「前記Xの各々」：単数導入のXへの後置分配（多項従属は対象外）
+            # 「複数の前記Xの各々」は上の量化子前置ルールで警告済みのため対象外
+            if (t['surf'] not in _TOUGAI_WORDS and len(direct_parents) <= 1
+                    and not quant
+                    and _POST_DISTRIB_PAT.match(body[_noun_end:_noun_end + 6])
+                    and not _COORD_BEFORE_PAT.search(body[max(0, t['start'] - 4):t['start']])
+                    and (num, noun, 'post_distrib') not in _uniqueness_seen):
+                _pd_issue = _post_distrib_cardinality_issue(
+                    num, t['surf'], noun, ancestor_tokens + tokens[:i])
+                if _pd_issue:
+                    _uniqueness_seen.add((num, noun, 'post_distrib'))
+                    issues.append(_pd_issue)
 
             zenshou_end = tokens[i]['end']
             verb_modified = noun_start > zenshou_end  # 「前記AしたB」パターン
