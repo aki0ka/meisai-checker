@@ -83,10 +83,26 @@
     },
     {
       "claims": [
+        3,
+        6
+      ],
+      "in_impl": true,
+      "noun": "分岐"
+    },
+    {
+      "claims": [
         1
       ],
       "in_impl": true,
       "noun": "回転"
+    },
+    {
+      "claims": [
+        3,
+        6
+      ],
+      "in_impl": true,
+      "noun": "対応"
     },
     {
       "claims": [
@@ -252,6 +268,13 @@
       ],
       "in_impl": true,
       "noun": "透過"
+    },
+    {
+      "claims": [
+        4
+      ],
+      "in_impl": true,
+      "noun": "配置"
     },
     {
       "claims": [

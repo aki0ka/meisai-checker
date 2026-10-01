@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 
 from ..tokenizer import (
-    _tokenize, _is_formal_noun_tok, _collect_defined_nouns,
+    _tokenize, _is_formal_noun_tok, _collect_defined_nouns, _is_noun_tok,
 )
 
 # 動詞サポートチェック用ストップワード（助動詞的・クレーム構文骨格）
@@ -93,6 +93,34 @@ def _extract_defined_nouns(text):
     return _collect_defined_nouns(_tokenize(text))
 
 
+def _extract_sahen_verb_stems(tokens):
+    """サ変名詞＋する/させる/される等の語幹をM6専用に抽出する。
+
+    _collect_defined_nouns（M3前記/当該の照応先候補収集と共有）は、
+    「Xする/させるＹ」のＹが直後の実質名詞であるとき、Ｘは独立した談話
+    参照子ではなくＹの修飾語に過ぎないとみなして登録しない
+    （例：「回転する部材」の「回転」は、部材自身が回転するという一体の
+    概念なのでＭ3の前記/当該の先行詞候補としては不要）。
+
+    しかしＭ6サポート要件チェックでは、この除外こそが見逃しの原因になる。
+    「揺動する部材」とクレームに書かれているのに本文に「回転する部材」
+    しかない場合、「部材」という名詞自体は一致するため、Ｘ（揺動/回転）が
+    独立登録されない限りクレーム特有の限定事項（揺動させるという動作）が
+    本文にあるかどうかを一切確認できず、サポート違反を検知できない。
+
+    そのためＭ6では、直後に何が続くか（実質名詞か・助動詞か等）に関わらず
+    サ変可能名詞＋「為る」由来の動詞を全て語幹ごと抽出する。
+    """
+    stems = set()
+    n = len(tokens)
+    for i, t in enumerate(tokens[:-1]):
+        if (_is_noun_tok(t) and t.get('pos2') == 'サ変可能'
+                and tokens[i + 1]['pos'] == '動詞'
+                and tokens[i + 1]['base'] == '為る'):
+            stems.add(t['surf'])
+    return stems
+
+
 def extract_verbs_for_support(text):
     """サポート要件チェック用の動詞基本形抽出。
     格助詞直後の文法的動詞（による・において等）と汎用動詞を除外し、
@@ -149,7 +177,8 @@ def extract_nouns_for_support(text):
     # 照応詞・「請求項N」を除去してから名詞句を収集
     clean = re.sub(r'前記|上記|当該|該', '', text)
     clean = re.sub(r'請求項[０-９0-9一二三四五六七八九十１-９]+', '', clean)
-    raw_nouns = _extract_defined_nouns(clean)
+    clean_toks = _tokenize(clean)
+    raw_nouns = set(_collect_defined_nouns(clean_toks)) | _extract_sahen_verb_stems(clean_toks)
     # 品詞ベースフィルタ
     nouns = {n for n in raw_nouns if _is_valid_support_noun(n)}
     # 包含除去：別の語句に完全に含まれる短い語は削除
