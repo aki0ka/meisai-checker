@@ -22,6 +22,7 @@ from ..tokenizer import (
     _is_alpha_fugo_tok,
     _ZENSHOU_WORDS,
     _ORDINAL_MODS,
+    _QUANT_MODS,
 )
 
 
@@ -1124,7 +1125,7 @@ def _parse_fugo_setsumeisho(text):
             body):
         fugo_start = m.group(1).strip()
         fugo_end = m.group(2).strip()
-        name = m.group(3).strip().rstrip('、，,')
+        name = m.group(3).strip().rstrip('、，,。．.')
         if not name:
             continue
         expanded = _expand_fugo_range(fugo_start, fugo_end)
@@ -1142,7 +1143,7 @@ def _parse_fugo_setsumeisho(text):
             r'([^\u3001\uff0c,\r\n\u3010\u3011]{1,30})',
             body):
         fugo = m.group(1).strip()
-        name = m.group(2).strip().rstrip('、，,')
+        name = m.group(2).strip().rstrip('、，,。．.')
         if fugo and name and classify_fugo(fugo):
             pairs[fugo] = name
 
@@ -1155,11 +1156,49 @@ def _parse_fugo_setsumeisho(text):
             line)
         if m2:
             fugo = m2.group(1).strip()
-            name = m2.group(2).strip()
+            name = m2.group(2).strip().rstrip('、，,。．.')
             if fugo and name and fugo not in pairs and classify_fugo(fugo):
                 pairs[fugo] = name
 
     return pairs
+
+
+# 量化・序列修飾語の先頭除去（文字列ベース）。body側の要素名は _strip_quant_prefix
+# によりトークン単位で既に正規化されているが、【符号の説明】側は自由記述文字列
+# （_parse_fugo_setsumeisho の抽出結果）であり同じ正規化を経ていない。
+# 「第１のセンサ」（本文）⇔「センサ」（符号の説明）のような、修飾語の
+# 有無だけの差異を許容するために使う。
+_SETSU_MODIFIER_PREFIX_RE = re.compile(
+    '^(?:' +
+    '|'.join(sorted(_QUANT_MODS | _ORDINAL_MODS, key=len, reverse=True)) +
+    ')の?|^第[０-９0-9]+の?'
+)
+
+
+def _strip_setsu_modifier_prefix(name):
+    """先頭の量化/序列修飾語（既知語彙のみ）を繰り返し除去する。"""
+    while True:
+        m = _SETSU_MODIFIER_PREFIX_RE.match(name)
+        if not m or not m.group():
+            break
+        name = name[m.end():]
+    return name
+
+
+def _names_equivalent(setsu_name, body_name):
+    """【符号の説明】の名称と本文の要素名が実質同一とみなせるか判定。
+
+    単純な部分文字列一致（in演算子）では、「教育・スキルデータベース」
+    （本文）に対し「スキルデータベース」（符号の説明、中点以降のみ記載）
+    のような、内容語の脱落まで一致と誤判定してしまう。先頭の既知の
+    量化/序列修飾語（各・複数の・第１の等）の有無の差異だけを許容し、
+    それ以外の文字列差異は不一致として扱う。
+    """
+    if setsu_name == body_name:
+        return True
+    a = _strip_setsu_modifier_prefix(setsu_name)
+    b = _strip_setsu_modifier_prefix(body_name)
+    return a == b
 
 
 def check_fugo_setsumeisho(fugo_table, text):
@@ -1210,7 +1249,7 @@ def check_fugo_setsumeisho(fugo_table, text):
         body_names = body_fugos[fugo]
         setsu_name = setsu_pairs[fugo]
         # 説明の名称が本文の要素名のいずれとも一致しない場合
-        if not any(setsu_name in bn or bn in setsu_name for bn in body_names):
+        if not any(_names_equivalent(setsu_name, bn) for bn in body_names):
             issues.append({
                 'milestone': 'M4', 'level': 'warning',
                 'msg': (f'符号「{fugo}」の名称が不一致：'

@@ -1510,10 +1510,11 @@ function buildFugoTab(con, d) {
       var setsuName = st[fugo];
       // 本文fugo_tableから対応する要素名・出現回数を検索
       var ftRow = (d.fugo_table || []).find(function(r){ return r.fugo === fugo; });
-      var bodyNames = ftRow ? ftRow.names.join('/') : '';
+      var bodyNameList = ftRow ? ftRow.names : [];
+      var bodyNames = bodyNameList.join('/');
       var count = ftRow ? ftRow.count : 0;
-      var mismatch = bodyNames && setsuName && bodyNames.indexOf(setsuName) < 0 &&
-                     setsuName.indexOf(bodyNames) < 0;
+      var mismatch = !!(bodyNames && setsuName &&
+                     !bodyNameList.some(function(bn){ return namesEquivalent(setsuName, bn); }));
       var rowStyle = mismatch ? 'background:rgba(224,85,85,.07);cursor:pointer' : 'cursor:pointer';
       shtml += '<tr class="setsu-row'+(mismatch?'':' setsu-row-ok')+'" data-fugo="' + esc(fugo) + '" style="' + rowStyle + '">' +
         '<td style="font-family:var(--mono);color:var(--cyan)">' + esc(fugo) + '</td>' +
@@ -2100,6 +2101,22 @@ function buildM4Content(d) {
     '<table class="el-table"><thead><tr><th>要素名</th><th>符号</th></tr></thead><tbody>'+rows+'</tbody></table>';
 }
 function lvLabel(lv){return{error:'ERR',warning:'WARN',style:'STYLE',ok:'OK',info:'INFO'}[lv]||lv;}
+// 量化/序列修飾語（fugo.py _QUANT_MODS/_ORDINAL_MODS と同一語彙）の先頭除去。
+// 「第１のセンサ」⇔「センサ」のような修飾語の有無だけの差異は一致とみなす。
+var SETSU_MODIFIER_PREFIX_RE = /^(?:各々|それぞれ|おのおの|複数|すべて|全て|全部|一部|双方|両方|一方|他方|各|他|第[０-９0-9]+)の?/;
+function stripSetsuModifierPrefix(name){
+  var prev;
+  do { prev = name; name = name.replace(SETSU_MODIFIER_PREFIX_RE, ''); } while (name !== prev);
+  return name;
+}
+// setsuName（【符号の説明】の名称）と本文の要素名が実質同一か判定。
+// 単純な部分文字列一致（indexOf）では、「教育・スキルデータベース」(本文) に
+// 対し「スキルデータベース」(符号の説明、中点以前が脱落) のような内容語の
+// 欠落まで一致と誤判定してしまうため、既知の修飾語差異のみ許容する。
+function namesEquivalent(setsuName, bodyName){
+  if (setsuName === bodyName) return true;
+  return stripSetsuModifierPrefix(setsuName) === stripSetsuModifierPrefix(bodyName);
+}
 function esc(s){
   if(!s) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');

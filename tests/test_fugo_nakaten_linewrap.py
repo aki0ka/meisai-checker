@@ -9,7 +9,7 @@ PDF/Word由来のテキストでは、レイアウト上の行折り返しが単
 """
 from __future__ import annotations
 
-from meisai_checker.patent.fugo import _extract_elements_tokens
+from meisai_checker.patent.fugo import _extract_elements_tokens, _names_equivalent
 
 
 def test_nakaten_compound_split_across_linebreak_is_joined():
@@ -24,3 +24,16 @@ def test_nakaten_compound_same_line_still_works():
     drawing_pairs, _ = _extract_elements_tokens(text)
     names = [name for name, fugo, *_ in drawing_pairs if fugo == '１３３']
     assert names == ['教育・スキルデータベース']
+
+
+def test_names_equivalent_rejects_dropped_nakaten_prefix():
+    """「教育・スキルデータベース」(本文) に対し「スキルデータベース」
+    (符号の説明、中点以前が脱落) は内容語の欠落であり不一致として扱う。"""
+    assert _names_equivalent('スキルデータベース', '教育・スキルデータベース') is False
+
+
+def test_names_equivalent_allows_known_modifier_prefix_diff():
+    """量化/序列修飾語の有無だけの差異は一致として扱う。"""
+    assert _names_equivalent('センサ', '第１のセンサ') is True
+    assert _names_equivalent('センサ', '複数のセンサ') is True
+    assert _names_equivalent('センサ', '一方のセンサ') is True
