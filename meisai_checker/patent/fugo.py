@@ -434,7 +434,24 @@ def _extract_elements_tokens(text):
     lines = text.splitlines(keepends=True)
     offset = 0
 
-    for line in lines:
+    idx = 0
+    n_lines = len(lines)
+    while idx < n_lines:
+        line = lines[idx]
+        consumed = 1
+        # 行末が中点（・）で終わる場合、PDF/Word由来のテキストで複合名詞の
+        # 途中に改行が入っている可能性がある（例：「教育・\nスキルデータ
+        # ベース」。本来は「教育・スキルデータベース」の1語）。次の非空行が
+        # 続く限り改行を除去して連結し、_is_nakaguro_join による中点結合
+        # 複合語の判定が行をまたいでも機能するようにする。offsetは連結した
+        # 元の行の文字数合計で進めるため、連結箇所より後のトークンの
+        # オフセットは除去した改行文字数（1〜2文字）分だけずれうる。
+        while (line.rstrip('\r\n').endswith('・')
+               and idx + consumed < n_lines
+               and lines[idx + consumed].strip()):
+            line = line.rstrip('\r\n') + lines[idx + consumed]
+            consumed += 1
+
         # カギカッコ内をマスク（同じ文字数でオフセットを保持）
         masked = re.sub(r'「[^」]*」|『[^』]*』',
                          lambda m: '　' * len(m.group()), line)
@@ -749,6 +766,7 @@ def _extract_elements_tokens(text):
             i += 1
 
         offset += len(line)
+        idx += consumed
     return drawing_pairs, variable_pairs
 
 
