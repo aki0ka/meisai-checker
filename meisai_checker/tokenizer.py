@@ -506,9 +506,18 @@ def _noun_span(tokens, start_idx):
     #   「〜することにより」のように事象を名詞化して継続させる用法であり、
     #   語幹（比較等）は事象名詞として先行詞になりうるため登録する
     #   （動詞由来先行詞として _collect_defined_nouns 側でマーキングする）。
+    #   例外：直後が使役の助動詞「せる」（「回転させる軸」等）の場合は、
+    #   せるの後ろに続く語（軸等）が何であれ除外しない。使役文の「軸」は
+    #   「回転」をさせる主体であり、「回転する部材」のように部材＝回転する
+    #   もの自身とは異なる別概念（Xをさせられる対象ではなくXを引き起こす
+    #   対象）なので、語幹（回転）は独立した技術用語として登録対象とする。
     if span and i < n and tokens[i]['pos'] == '動詞' and tokens[i]['base'] == '為る':
         _after = tokens[i + 1] if i + 1 < n else None
-        if not (_after is None or _is_formal_noun_tok(_after) or _after['pos'] == '補助記号'):
+        _is_causative_aux = (_after is not None and _after['pos'] == '助動詞'
+                              and _after.get('base') == 'せる')
+        if (not _is_causative_aux
+                and not (_after is None or _is_formal_noun_tok(_after)
+                         or _after['pos'] == '補助記号')):
             return []
 
     # 末尾の「の」は除く
