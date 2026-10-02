@@ -248,7 +248,7 @@ def _plural_intro_warning(num, surf, noun):
                 f"裸の「{surf}{noun}」では群中のどの個体を指すか定まらず唯一性が崩れます。"
                 f"群全体を指すなら「{surf}複数の{noun}」、"
                 f"個体を指すなら「{surf}複数の{noun}のそれぞれ」「{surf}複数の{noun}のうちの少なくとも１つ」、"
-                f"または先行詞側に固有名称を付与することを検討してください。"),
+                f"又は先行詞側に固有名称を付与することを検討してください。"),
     }
 
 
@@ -501,7 +501,7 @@ def _head_match_error(num, surf, noun, head_only_source):
             f"請求項{num}：「{surf}{noun}」は「{head_only_source}」の主要部のみと一致します。"
             f"修飾語を省略すると、後から類似要素（同じ主要部を持つ別の限定）が"
             f"追加された場合に指示先が曖昧になります。"
-            f"「{surf}{head_only_source}」への変更、または「{noun}」を"
+            f"「{surf}{head_only_source}」への変更、又は「{noun}」を"
             f"独立した先行詞として先に定義することを検討してください。"
         ),
     }
@@ -668,7 +668,7 @@ def check_zenshou(claims, dep_map):
                         f"意図に応じて次のいずれかに書き換えてください："
                         f"「前記複数の{noun}のそれぞれ」（複数の群から分配）、"
                         f"「前記{noun}のそれぞれ」（複数先行詞がある場合）、"
-                        f"または先行詞を「複数の{noun}」として導入してください。"
+                        f"又は先行詞を「複数の{noun}」として導入してください。"
                     ),
                 })
 
@@ -799,19 +799,21 @@ def check_zenshou(claims, dep_map):
                     found, _bridge_src, _verb_origin, _ = _found_in_scope_ex(
                         noun, ancestor_tokens, plural_map=first_seen_as_plural)
                 else:
-                    # 多項従属：いずれか一つの直接親のスコープで見つかれば良い
-                    # 「請求項1又は2に記載の〜」は一方が適用されるので、
-                    # 一方のスコープで見つかれば先行詞として成立する
+                    # 多項従属：択一引用はどの枝で読んでも明確でなければならない
+                    # （36条6項2号）。全ての直接親のスコープで見つかる場合のみ成立。
+                    # 「請求項1，8又は9に記載の〜」で先行詞が請求項8にしかない場合、
+                    # 請求項1を選んで読むと先行詞が欠落し不明確になる。
                     _parent_results = [
-                        _found_in_scope_ex(
+                        (p, _found_in_scope_ex(
                             noun,
                             _scope_tokens_for_parent(p, dep_map, claim_tokens, _cache, _scope_toks_cache),
-                            plural_map=first_seen_as_plural)
+                            plural_map=first_seen_as_plural))
                         for p in direct_parents
                     ]
-                    found = any(r[0] for r in _parent_results)
-                    _bridge_src = next((r[1] for r in _parent_results if r[1]), None)
-                    _verb_origin = next((r[2] for r in _parent_results if r[0]), False)
+                    found = all(r[0] for _, r in _parent_results)
+                    _bridge_src = next((r[1] for _, r in _parent_results if r[1]), None)
+                    _verb_origin = next((r[2] for _, r in _parent_results if r[0]), False)
+                    _missing_parents = [p for p, r in _parent_results if not r[0]]
 
             if not found:
                 suppressed = False
@@ -883,9 +885,9 @@ def check_zenshou(claims, dep_map):
 
                 if not suppressed:
                     if t['surf'] not in _TOUGAI_WORDS and len(direct_parents) > 1:
-                        # 多項従属の場合、どの親のスコープでも見つからないことを示す
-                        # （いずれか一つで見つかれば先行詞として成立するため）
-                        detail = f"（請求項{direct_parents}全ての親スコープで見つかりません）"
+                        # 多項従属の場合、先行詞が欠落している枝（親請求項）を示す
+                        # （択一引用はどの枝で読んでも明確でなければならないため）
+                        detail = f"（請求項{_missing_parents}を選択した場合に先行詞が見つかりません）"
                     elif t['surf'] not in _TOUGAI_WORDS:
                         dep_chain = sorted(ancestors)
                         detail = (f"（参照先：同一請求項前方＋従属元{dep_chain}）"
