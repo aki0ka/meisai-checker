@@ -370,6 +370,15 @@ def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
         if tokens[k]['pos'] == '補助記号':
             clause_start = k + 1
             break
+        # 名詞句同士の並列境界（「Aの着色剤と指定された前記B」の「と」）でも
+        # 遡りを止める。句読点がない長い請求項では、接続語の直前が名詞的
+        # （名詞・接尾辞）なら別の構成要素（名詞句）の終わりとみなせる。
+        # 動詞の中止形に続く接続語（「変形し、かつ接触した前記C」）は同じ
+        # 修飾節の一部なので対象外（接続語の直前が名詞的かどうかで区別）。
+        if (tokens[k]['surf'] in _COORD_WORDS and k >= 1
+                and tokens[k - 1]['pos'] in ('名詞', '接尾辞', '代名詞')):
+            clause_start = k + 1
+            break
     return clause_start
 
 
