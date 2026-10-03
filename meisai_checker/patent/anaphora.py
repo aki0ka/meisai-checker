@@ -270,6 +270,40 @@ def _verb_origin_suggestion(num, surf, noun):
 _COORD_WORDS = {'および', '及び', '並びに', 'ならびに', '又は', 'または', '若しくは', 'もしくは', 'と', 'や'}
 
 
+def _coordination_head_zenshou(tokens, zenshou_idx):
+    """並列チェーン（読点・接続語で連結された複数の前記/上記要素）を遡り、
+    実際に動詞修飾節を受けている先頭要素のトークン位置を返す。
+
+    「前記速度、前記位置及び前記角度の有効性」で「前記角度」から見ると、
+    直前の「及び」の前にある最も近い前記要素は「前記位置」だが、
+    「前記位置」自身も直前が読点で区切られた非先頭要素に過ぎない
+    （本当の先頭は「前記速度」）。一段階だけ遡ると「前記位置」止まりに
+    なり、「前記位置」の直前が読点のため動詞修飾節の検出に失敗する
+    （読点のみの並列は動詞修飾の連体形チェックに引っかからないため）。
+    これを避けるため、直前が接続語または読点である限り再帰的に遡る。
+    """
+    i = zenshou_idx
+    while i >= 2:
+        prev = tokens[i - 1]
+        is_sep = prev['surf'] in _COORD_WORDS or (
+            prev['pos'] == '補助記号' and prev['surf'] == '、')
+        if not is_sep:
+            break
+        found = None
+        for k in range(i - 2, -1, -1):
+            if tokens[k]['pos'] == '補助記号':
+                if tokens[k]['surf'] == '、':
+                    continue
+                break
+            if tokens[k]['surf'] in _ZENSHOU_WORDS:
+                found = k
+                break
+        if found is None:
+            break
+        i = found
+    return i
+
+
 def _preceded_by_coordinated_zenshou(tokens, zenshou_idx, noun_end=None):
     """zenshou_idx の直前が並列接続語（及び・又は等）で、さらにその前方
     （直近の補助記号まで）に別の前記/上記があれば True。
@@ -308,6 +342,8 @@ def _preceded_by_coordinated_zenshou(tokens, zenshou_idx, noun_end=None):
         return False
     for k in range(i - 2, -1, -1):
         if tokens[k]['pos'] == '補助記号':
+            if tokens[k]['surf'] == '、':
+                continue
             break
         if tokens[k]['surf'] in _ZENSHOU_WORDS:
             return True
@@ -345,12 +381,7 @@ def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
     i = zenshou_idx
     coordinated = _preceded_by_coordinated_zenshou(tokens, i, noun_end)
     if coordinated:
-        for k in range(i - 2, -1, -1):
-            if tokens[k]['pos'] == '補助記号':
-                break
-            if tokens[k]['surf'] in _ZENSHOU_WORDS:
-                i = k
-                break
+        i = _coordination_head_zenshou(tokens, i)
     if i == 0:
         return None
     prev = tokens[i - 1]
