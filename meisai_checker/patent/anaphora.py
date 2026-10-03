@@ -267,6 +267,31 @@ def _verb_origin_suggestion(num, surf, noun):
     }
 
 
+_COORD_WORDS = {'および', '及び', '並びに', 'ならびに', '又は', 'または', '若しくは', 'もしくは', 'と', 'や'}
+
+
+def _preceded_by_coordinated_zenshou(tokens, zenshou_idx):
+    """zenshou_idx の直前が並列接続語（及び・又は等）で、さらにその前方
+    （直近の補助記号まで）に別の前記/上記があれば True。
+
+    「前記速度及び前記位置の有効性」のように並列された複数の前記要素の
+    後にCが続く場合、「の」＋Cは並列全体（速度及び位置）に対する属性
+    であって、並列の最後の要素（位置）だけを修飾しているわけではない。
+    この場合、noun_end直後が「の」でも右側主要部ヒューリスティックによる
+    除外を適用すると、並列の最初の要素（速度）は検出されるのに最後の
+    要素（位置）だけ検出漏れになり一貫性を失う（2026-10-03発見）。
+    """
+    i = zenshou_idx
+    if i < 2 or tokens[i - 1]['surf'] not in _COORD_WORDS:
+        return False
+    for k in range(i - 2, -1, -1):
+        if tokens[k]['pos'] == '補助記号':
+            break
+        if tokens[k]['surf'] in _ZENSHOU_WORDS:
+            return True
+    return False
+
+
 def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
     """照応詞の直前に置かれた連体修飾節の開始トークン位置を返す（該当なければ None）。
 
@@ -285,8 +310,25 @@ def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
     連体修飾節「〜した」は「B」ではなく最終的な主要部Cにかかる可能性が高く、
     Bを対象とした絞り込み冗長警告は誤検知になる。noun_end が「の」の
     直前位置と一致する場合はこのケースとみなしスキップする。
+
+    ただし B が並列接続語（及び等）で連結された複数前記要素の非先頭
+    要素である場合はこの除外を適用しない（_preceded_by_coordinated_zenshou
+    参照）：「のC」は並列全体への属性であり、個々の要素への所有格修飾
+    ではないため、右側主要部ヒューリスティックの前提が成り立たない。
+
+    並列の非先頭要素（「前記位置」）は直前トークンが接続語（「及び」）で
+    動詞ではないため、以下の prev チェックは先頭要素（「前記速度」）の
+    位置に読み替えて行う（修飾節は並列全体にかかっているため）。
     """
     i = zenshou_idx
+    coordinated = _preceded_by_coordinated_zenshou(tokens, i)
+    if coordinated:
+        for k in range(i - 2, -1, -1):
+            if tokens[k]['pos'] == '補助記号':
+                break
+            if tokens[k]['surf'] in _ZENSHOU_WORDS:
+                i = k
+                break
     if i == 0:
         return None
     prev = tokens[i - 1]
@@ -294,7 +336,7 @@ def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
         return None
     if prev['pos'] not in ('動詞', '助動詞', '形容詞'):
         return None
-    if noun_end is not None:
+    if noun_end is not None and not coordinated:
         for tk in tokens[i + 1:]:
             if tk['start'] < noun_end:
                 continue
