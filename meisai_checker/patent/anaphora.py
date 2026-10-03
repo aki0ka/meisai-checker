@@ -267,72 +267,24 @@ def _verb_origin_suggestion(num, surf, noun):
     }
 
 
-def _redundant_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
-    """「前記Aが〜した前記B」のような後付け修飾節を検出する。
+def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
+    """照応詞の直前に置かれた連体修飾節の開始トークン位置を返す（該当なければ None）。
 
-    「前記B」の直前が連体形の完了節（〜た/だ）で終わっており、かつその節の
-    主語が別の前記/当該Aである場合、節の開始トークン位置を返す。該当なければ None。
+    「出力された前記データ」「記憶される前記データ」「前記Aが変形した前記B」
+    のように、節内に「前記Aが」という主語を持つ・持たないいずれの形も対象。
+    主語の有無や時制・態（した/する/している等）を問わないのは、問題の
+    本質が構文形式ではなく「前記/当該は先行詞を一意に選択済み（ι演算子）
+    なので、その手前に置かれた連体修飾節は絞り込みとして機能しない」という
+    論理的な余剰性だから（再絞り込み不可）。過去形（〜た/だ）に限定していた
+    旧実装（_redundant_modifier_clause_start、2026-10-03に本関数へ統合）は、
+    この条件の真部分集合に過ぎないことを検証済み。
 
-    理論的背景：前記/当該は先行詞を封印する（唯一の個体を選択済み）ため、
-    その後に付ける修飾節は本来の絞り込み機能を果たさない。
-
-    ただし「前記Aが〜した前記BのC」のように「前記B」の直後が「の」で
-    さらに名詞句が続く場合、B は当該NPの主要部ではなく後続Cの被修飾格
+    「前記Aが〜した前記BのC」のように「前記B」の直後が「の」でさらに
+    名詞句が続く場合、B は当該NPの主要部ではなく後続Cの被修飾格
     （所有格）に過ぎない。日本語は右側主要部（head-final）のため、
     連体修飾節「〜した」は「B」ではなく最終的な主要部Cにかかる可能性が高く、
     Bを対象とした絞り込み冗長警告は誤検知になる。noun_end が「の」の
     直前位置と一致する場合はこのケースとみなしスキップする。
-    """
-    i = zenshou_idx
-    if i == 0:
-        return None
-    prev = tokens[i - 1]
-    if not (prev['cform'].startswith('連体形') and prev['surf'].endswith(('た', 'だ'))):
-        return None
-    if noun_end is not None:
-        for tk in tokens[i + 1:]:
-            if tk['start'] < noun_end:
-                continue
-            if tk['start'] == noun_end and tk['surf'] == 'の' and tk['pos'] == '助詞':
-                return None
-            break
-
-    # 節の開始位置を、直前の句読点まで遡って探す（見つからなければ請求項冒頭）
-    clause_start = 0
-    for k in range(i - 2, -1, -1):
-        if tokens[k]['pos'] == '補助記号':
-            clause_start = k + 1
-            break
-
-    # 節内に「前記/当該+名詞+が」という主語パターンがあるか探す
-    for j in range(clause_start, i - 1):
-        if tokens[j]['surf'] not in _ZENSHOU_WORDS:
-            continue
-        _, _a_start, a_end = _noun_after_zenshou(tokens, j)
-        if not _a_start:
-            continue
-        k2 = j + 1
-        while k2 < i - 1 and tokens[k2]['end'] < a_end:
-            k2 += 1
-        if (k2 < i - 1 and tokens[k2]['end'] == a_end
-                and k2 + 1 <= i - 2
-                and tokens[k2 + 1]['surf'] == 'が' and tokens[k2 + 1]['pos'] == '助詞'):
-            return j
-    return None
-
-
-def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
-    """照応詞の直前に置かれた連体修飾節の開始トークン位置を返す（該当なければ None）。
-
-    「出力された前記データ」「記憶される前記データ」のように、節内に
-    「前記Aが」という主語を持たない形も対象にする点で
-    _redundant_modifier_clause_start より広い（あちらの検出条件を包含する）。
-
-    理論的背景は同じ：「前記X」は先行詞を一意に選択済みなので、その手前に
-    置かれた連体修飾節は絞り込みとして機能しない（再絞り込み不可）。
-
-    右側主要部の扱い（「〜した前記BのC」で節がCにかかる可能性）は
-    _redundant_modifier_clause_start と同じく noun_end で除外する。
     """
     i = zenshou_idx
     if i == 0:
@@ -426,9 +378,8 @@ def _preceding_clause_disambiguates(tokens, zenshou_idx):
     直前の修飾がどのインスタンスかを別の前記/当該Xで特定している場合、
     同一請求項内での同名詞の複数回裸定義があっても曖昧ではないとみなし、
     唯一性崩壊警告（請求項内版）から除外する。
-    「前記/当該X+が」限定の_redundant_modifier_clause_startとは判定基準が
-    異なる（あちらは「絞り込みとして冗長かどうか」、こちらは「実際に
-    曖昧性を解消しているか」を見るため）。
+    _pre_modifier_clause_start とは判定基準が異なる（あちらは「絞り込みとして
+    冗長かどうか」、こちらは「実際に曖昧性を解消しているか」を見るため）。
     """
     i = zenshou_idx
     if i == 0:
@@ -521,16 +472,6 @@ def _post_distrib_cardinality_issue(num, surf, noun, scope_tokens):
         'msg': (f"請求項{num}：「{noun}」は数を示さずに（単数として）導入されていますが、"
                 f"「{surf}{noun}」に後置の分配（の各々・のそれぞれ等）がかかっています。"
                 f"複数の意図であれば「複数の{noun}」として導入してください。"),
-    }
-
-
-def _redundant_modifier_warning(num, surf, noun, mod_text):
-    return {
-        'claim': num, 'level': 'info',
-        'word': surf, 'noun': noun,
-        'msg': (f"請求項{num}：「{mod_text}{surf}{noun}」の「{surf}{noun}」は既に先行詞が一意です。"
-                f"この修飾節が新しい技術的事実の追加であれば問題ありませんが、"
-                f"先行詞の絞り込みを意図したものであれば機能していない可能性があります。"),
     }
 
 
@@ -840,25 +781,22 @@ def check_zenshou(claims, dep_map):
                                 and (num, noun) not in _plural_intro_seen):
                             _plural_intro_seen.add((num, noun))
                             issues.append(_plural_intro_warning(num, t['surf'], noun))
-                        # 後付け修飾節：先行詞が既に一意なのに「前記Aが〜した前記B」で修飾している
-                        if len(direct_parents) <= 1 and len(bare) <= 1 and not same_claim_dup:
-                            _mod_start = _redundant_modifier_clause_start(tokens, i, _noun_end)
+                        # 後付け修飾節：先行詞が既に一意なのに直前の連体修飾節
+                        # （「前記Aが〜した前記B」「出力された前記B」等、主語の
+                        # 有無・時制を問わない）で絞り込もうとしている。
+                        # 群として導入された先行詞は部分参照の意図がありうるため対象外。
+                        if (len(direct_parents) <= 1 and len(bare) <= 1 and not same_claim_dup
+                                and first_seen_as_plural.get(noun) is not True):
+                            _mod_start = _pre_modifier_clause_start(tokens, i, _noun_end)
                             if _mod_start is not None:
                                 mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
-                                issues.append(_redundant_modifier_warning(num, t['surf'], noun, mod_text))
-                            elif first_seen_as_plural.get(noun) is not True:
-                                # 主語「前記Aが」を伴わない前置連体修飾（「出力された前記データ」）。
-                                # 群として導入された先行詞は部分参照の意図がありうるため対象外。
-                                _mod_start = _pre_modifier_clause_start(tokens, i, _noun_end)
+                                issues.append(_pre_modifier_warning(num, t['surf'], noun, mod_text))
+                            else:
+                                # 「〜された後の前記X」：受身節＋時間名詞を挟むパターン
+                                _mod_start = _passive_temporal_clause_start(tokens, i)
                                 if _mod_start is not None:
                                     mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
-                                    issues.append(_pre_modifier_warning(num, t['surf'], noun, mod_text))
-                                else:
-                                    # 「〜された後の前記X」：受身節＋時間名詞を挟むパターン
-                                    _mod_start = _passive_temporal_clause_start(tokens, i)
-                                    if _mod_start is not None:
-                                        mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
-                                        issues.append(_passive_temporal_notice(num, t['surf'], noun, mod_text))
+                                    issues.append(_passive_temporal_notice(num, t['surf'], noun, mod_text))
                     continue
                 if len(direct_parents) <= 1:
                     # 単項従属または独立：全祖先を結合してチェック
@@ -1039,25 +977,22 @@ def check_zenshou(claims, dep_map):
                         and (num, noun) not in _plural_intro_seen):
                     _plural_intro_seen.add((num, noun))
                     issues.append(_plural_intro_warning(num, t['surf'], noun))
-                # 後付け修飾節：先行詞が既に一意なのに「前記Aが〜した前記B」で修飾している
-                if len(direct_parents) <= 1 and len(bare) <= 1 and not same_claim_dup:
-                    _mod_start = _redundant_modifier_clause_start(tokens, i, _noun_end)
+                # 後付け修飾節：先行詞が既に一意なのに直前の連体修飾節
+                # （「前記Aが〜した前記B」「出力された前記B」等、主語の
+                # 有無・時制を問わない）で絞り込もうとしている。
+                # 群として導入された先行詞は部分参照の意図がありうるため対象外。
+                if (len(direct_parents) <= 1 and len(bare) <= 1 and not same_claim_dup
+                        and first_seen_as_plural.get(noun) is not True):
+                    _mod_start = _pre_modifier_clause_start(tokens, i, _noun_end)
                     if _mod_start is not None:
                         mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
-                        issues.append(_redundant_modifier_warning(num, t['surf'], noun, mod_text))
-                    elif first_seen_as_plural.get(noun) is not True:
-                        # 主語「前記Aが」を伴わない前置連体修飾（「出力された前記データ」）。
-                        # 群として導入された先行詞は部分参照の意図がありうるため対象外。
-                        _mod_start = _pre_modifier_clause_start(tokens, i, _noun_end)
+                        issues.append(_pre_modifier_warning(num, t['surf'], noun, mod_text))
+                    else:
+                        # 「〜された後の前記X」：受身節＋時間名詞を挟むパターン
+                        _mod_start = _passive_temporal_clause_start(tokens, i)
                         if _mod_start is not None:
                             mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
-                            issues.append(_pre_modifier_warning(num, t['surf'], noun, mod_text))
-                        else:
-                            # 「〜された後の前記X」：受身節＋時間名詞を挟むパターン
-                            _mod_start = _passive_temporal_clause_start(tokens, i)
-                            if _mod_start is not None:
-                                mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
-                                issues.append(_passive_temporal_notice(num, t['surf'], noun, mod_text))
+                            issues.append(_passive_temporal_notice(num, t['surf'], noun, mod_text))
     return issues
 
 
