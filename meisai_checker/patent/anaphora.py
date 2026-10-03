@@ -270,7 +270,7 @@ def _verb_origin_suggestion(num, surf, noun):
 _COORD_WORDS = {'および', '及び', '並びに', 'ならびに', '又は', 'または', '若しくは', 'もしくは', 'と', 'や'}
 
 
-def _preceded_by_coordinated_zenshou(tokens, zenshou_idx):
+def _preceded_by_coordinated_zenshou(tokens, zenshou_idx, noun_end=None):
     """zenshou_idx の直前が並列接続語（及び・又は等）で、さらにその前方
     （直近の補助記号まで）に別の前記/上記があれば True。
 
@@ -280,9 +280,31 @@ def _preceded_by_coordinated_zenshou(tokens, zenshou_idx):
     この場合、noun_end直後が「の」でも右側主要部ヒューリスティックによる
     除外を適用すると、並列の最初の要素（速度）は検出されるのに最後の
     要素（位置）だけ検出漏れになり一貫性を失う（2026-10-03発見）。
+
+    この並列リダイレクトは「のC」構造の誤帰属を避けるためだけに存在する
+    ので、noun_end 直後が実際に「の」である場合のみ True とする。
+
+    「前記センサユニットが取り付けられている前記装置及び前記装置が
+    設けられている前記販売先」「前記装置と前記装置が設けられている
+    前記販売先と前記装置に使用されている前記潤滑油の油種」のように、
+    「及び／と」の直後の前記Xがそれ自体別の節の主語・格要素（直後が
+    「が」「に」等）である場合は、1つ目の前記要素と同格の並列要素では
+    なく、単に別の節が接続語で連結されているに過ぎない。noun_end直後が
+    「の」でなければそもそも右側主要部ヒューリスティックの対象でもない
+    ので、この場合は False を返し通常の prev チェックに委ねる
+    （並列判定の誤検知：2026-10-03発見）。
     """
     i = zenshou_idx
-    if i < 2 or tokens[i - 1]['surf'] not in _COORD_WORDS:
+    if i < 2 or tokens[i - 1]['surf'] not in _COORD_WORDS or noun_end is None:
+        return False
+    followed_by_no = False
+    for tk in tokens[i + 1:]:
+        if tk['start'] < noun_end:
+            continue
+        followed_by_no = (tk['start'] == noun_end and tk['surf'] == 'の'
+                           and tk['pos'] == '助詞')
+        break
+    if not followed_by_no:
         return False
     for k in range(i - 2, -1, -1):
         if tokens[k]['pos'] == '補助記号':
@@ -321,7 +343,7 @@ def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
     位置に読み替えて行う（修飾節は並列全体にかかっているため）。
     """
     i = zenshou_idx
-    coordinated = _preceded_by_coordinated_zenshou(tokens, i)
+    coordinated = _preceded_by_coordinated_zenshou(tokens, i, noun_end)
     if coordinated:
         for k in range(i - 2, -1, -1):
             if tokens[k]['pos'] == '補助記号':
