@@ -19,6 +19,7 @@ except Exception:
 
 from .analyzer import analyze
 from .file_reader import read_file
+from .preprocessor import normalize
 from . import config as _cfg
 
 
@@ -34,7 +35,12 @@ class Api:
         if not text or not text.strip():
             return {'error': 'テキストが空です'}
         try:
-            result = analyze(text)
+            # CLI（cli.py）・MCPサーバー（mcp_server.py）は normalize() を経由して
+            # J-PlatPat特有のノイズ（INIDコード (57) 等）を除去しているが、GUIだけ
+            # これを素通りしていたため、J-PlatPatからの貼り付け・D&Dで (57) 等を
+            # 符号と誤認するM4誤検知が発生していた（2026-10-03公報スキャンで発見）。
+            norm_doc = normalize(text)
+            result = analyze(norm_doc.text)
             return json.loads(json.dumps(result, default=list))
         except Exception as e:
             import traceback
