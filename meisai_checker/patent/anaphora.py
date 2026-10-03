@@ -357,6 +357,66 @@ def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
     return clause_start
 
 
+_TEMPORAL_NOUNS_PRE_ZENSHOU = {'後', '時', '際', '場合', '状態'}
+
+
+def _passive_temporal_clause_start(tokens, zenshou_idx):
+    """「〜された{後/時/際等}の前記X」構造を検出する。
+
+    受身形（れる/られる）を含む連体修飾節の直後に時間名詞＋「の」が続き、
+    その直後に前記/上記が来るパターン。節の開始トークン位置を返す
+    （該当なければ None）。
+
+    「後の」は _pre_modifier_clause_start では検出できない：直前トークンが
+    連体形動詞ではなく「の」（助詞）だから（間に時間名詞が挟まるため）。
+
+    理論的背景：この構造はXの同一性（指示対象）が事象の前後で保たれて
+    いるかを機械的には判定できない。「作業が行われた後の前記容器」の
+    ように容器が物理的に持続する個体（コンテナ型）ならXは変化しておらず
+    問題ないが、「加熱された後の前記水」のように値・材料そのものが
+    同一性の基準（コンテナ型でない）場合はXが事象後に別対象になっている
+    可能性がある。この判別はツールからはできないため、エラー・警告では
+    なく確認を促す情報レベルの通知とする。
+    """
+    i = zenshou_idx
+    if i < 3:
+        return None
+    if tokens[i - 1]['surf'] != 'の' or tokens[i - 1]['pos'] != '助詞':
+        return None
+    if tokens[i - 2]['surf'] not in _TEMPORAL_NOUNS_PRE_ZENSHOU:
+        return None
+    clause_start = 0
+    for k in range(i - 3, -1, -1):
+        if tokens[k]['pos'] == '補助記号':
+            clause_start = k + 1
+            break
+    has_passive = any(
+        tokens[j]['pos'] == '助動詞' and tokens[j]['base'] in ('れる', 'られる')
+        for j in range(clause_start, i - 2)
+    )
+    if not has_passive:
+        return None
+    return clause_start
+
+
+def _passive_temporal_notice(num, surf, noun, mod_text):
+    if len(mod_text) > 30:
+        mod_text = '…' + mod_text[-30:]
+    return {
+        'claim': num, 'level': 'info',
+        'word': surf, 'noun': noun,
+        'msg': (f"請求項{num}：「{mod_text}{surf}{noun}」は受身形の修飾節の後に"
+                f"「{surf}{noun}」が続いています。「{noun}」がこの事象の前後で"
+                f"同一の対象を指しているか確認してください。"
+                f"容器・部品等、物理的に持続する対象であれば問題ありませんが、"
+                f"材料・測定値・組成等、値そのものが同一性の基準となるものは"
+                f"事象後に別の対象になっている可能性があります。"
+                f"その場合は「{noun}」に新しい名称を与える、"
+                f"又は「〜した後に、{noun}が〜する」のような動詞構文への"
+                f"書き換えを検討してください。"),
+    }
+
+
 def _preceding_clause_disambiguates(tokens, zenshou_idx):
     """zenshou_idxを含む節（直前の句読点以降）に、他の前記/当該参照が
     先行して含まれていれば True。
@@ -793,6 +853,12 @@ def check_zenshou(claims, dep_map):
                                 if _mod_start is not None:
                                     mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
                                     issues.append(_pre_modifier_warning(num, t['surf'], noun, mod_text))
+                                else:
+                                    # 「〜された後の前記X」：受身節＋時間名詞を挟むパターン
+                                    _mod_start = _passive_temporal_clause_start(tokens, i)
+                                    if _mod_start is not None:
+                                        mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
+                                        issues.append(_passive_temporal_notice(num, t['surf'], noun, mod_text))
                     continue
                 if len(direct_parents) <= 1:
                     # 単項従属または独立：全祖先を結合してチェック
@@ -986,6 +1052,12 @@ def check_zenshou(claims, dep_map):
                         if _mod_start is not None:
                             mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
                             issues.append(_pre_modifier_warning(num, t['surf'], noun, mod_text))
+                        else:
+                            # 「〜された後の前記X」：受身節＋時間名詞を挟むパターン
+                            _mod_start = _passive_temporal_clause_start(tokens, i)
+                            if _mod_start is not None:
+                                mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
+                                issues.append(_passive_temporal_notice(num, t['surf'], noun, mod_text))
     return issues
 
 
