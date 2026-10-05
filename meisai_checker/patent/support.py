@@ -28,6 +28,10 @@ from ..tokenizer import (
 _TERM_RUN = re.compile(r'[一-鿿々゠-ヿ０-９0-9ー]{2,}')
 _ISUREKA_REF_PAT = re.compile(r'いずれか[０-９0-9]*項')
 _DIGIT_ONLY_PAT = re.compile(r'^[０-９0-9ー]+$')
+# 並列接続詞（又は・及び・並びに・若しくは等）は先頭の漢字（又・及・並・若）が
+# 直前の漢字列と地続きになり、_TERM_RUN が「回転又は揺動」→「回転又」のように
+# 接続詞の頭を取り込んでしまう。語抽出前に除去して断ち切る。
+_CONJ_PAT = re.compile(r'又は|または|及び|並びに|ならびに|若しくは|もしくは')
 
 
 def _strip_quant_and_formal(s):
@@ -57,6 +61,7 @@ def _extract_term_run_nouns(text):
     clean = re.sub(r'前記|上記|当該|該', '', text)
     clean = re.sub(r'請求項[０-９0-9一二三四五六七八九十１-９]+', '', clean)
     clean = _ISUREKA_REF_PAT.sub('', clean)
+    clean = _CONJ_PAT.sub('　', clean)
     raw = set(_TERM_RUN.findall(clean))
     out = set()
     for r in raw:
