@@ -1086,6 +1086,9 @@ def _found_in_scope_ex(noun, scope_tokens, plural_map=None, allow_modifier_bridg
     当該・該は意図的に同一請求項スコープに閉じるため plural_map を渡さない。
 
     例外1: UniDicが「部内」等を複合名詞化するケース → 末尾位置接尾辞を除去して再検索。
+    例外1b: 末尾接尾辞のタグ揺れの一般化版。noun単体を再トークナイズし、MeCab
+            辞書が接尾辞と判定した末尾形態素のみ除去して再検索（例外1は
+            _LOC_SUFFIXES_BOUNDARY限定だが、こちらは接尾辞クラス全般に対応）。
     例外2: スペルアウトブリッジ（「ＧＮＳＳ受信機」←「ＧＮＳＳ（…）受信機」）。
     例外3: 限定詞+の+核名詞（「所定の分岐画像」）の場合、限定詞を除外した核名詞でも再検索。
 
@@ -1112,6 +1115,22 @@ def _found_in_scope_ex(noun, scope_tokens, plural_map=None, allow_modifier_bridg
         if len(base) >= 2 and base in defined:
             occs = defined[base]
             return True, None, bool(occs) and all(o.verb_origin for o in occs), None
+    # 例外1b: 末尾接尾辞の文脈依存タグ揺れ対応（一般化版）。
+    # 例外1は_LOC_SUFFIXES_BOUNDARY（内・外・上・下・中・側・前・後）限定だが、
+    # 「前記対象日」の「日」（名詞-副詞可能⇔接尾辞）のように、MeCabが同じ
+    # 形態素を左文脈で別タグに揺らすケースは_ITER_SUFFIXES（ごと・毎・向け・
+    # 用・別・系・類）等、他の接尾辞クラスでも起こりうる。noun自体を単体で
+    # 再トークナイズし、MeCab辞書が実際に接尾辞と判定した末尾形態素だけを
+    # 剥がして再検索する。文字列の前後一致（_ITER_SUFFIXES等への単純一致）は
+    # 「判別」「利用」のように語の一部として頻出する語を壊す危険があるため
+    # 使わず、必ずnoun自体の再トークナイズ結果のPOSタグで判定する。
+    if noun and len(noun) > 2:
+        _tail_toks = _tokenize(noun)
+        if len(_tail_toks) > 1 and _tail_toks[-1]['pos'] == '接尾辞':
+            base = noun[:-len(_tail_toks[-1]['surf'])]
+            if len(base) >= 2 and base in defined:
+                occs = defined[base]
+                return True, None, bool(occs) and all(o.verb_origin for o in occs), None
     # 例外3: 限定詞+核名詞で再検索（「分岐画像」→「所定の分岐画像」）
     # 「所定の分岐画像」で定義されている場合、「前記分岐画像」で照応できるようにする
     # ただし同一性変更限定詞（他・別）は除外：「他のX」≠「X」なので「前記X」では照応不可
