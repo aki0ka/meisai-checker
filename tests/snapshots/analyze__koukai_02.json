@@ -996,13 +996,6 @@
         1
       ],
       "in_impl": true,
-      "noun": "判別"
-    },
-    {
-      "claims": [
-        1
-      ],
-      "in_impl": true,
       "noun": "制御部"
     },
     {
@@ -1054,6 +1047,13 @@
       ],
       "in_impl": true,
       "noun": "接続"
+    },
+    {
+      "claims": [
+        1
+      ],
+      "in_impl": true,
+      "noun": "故障判別"
     },
     {
       "claims": [

@@ -13,7 +13,57 @@ import re
 
 from ..tokenizer import (
     _tokenize, _is_formal_noun_tok, _collect_defined_nouns, _is_noun_tok,
+    _QUANT_MODS,
 )
+
+# 技術用語チャンク抽出用（漢字・カタカナ・全角数字・長音符の連続）。
+# MeCabベースの _collect_defined_nouns の「保険」として論理和で足す候補源。
+# MeCabは文脈依存のPOSタグ揺れ（例：同じ「日」が初出時は名詞-副詞可能、
+# 「前記対象日」参照時は接尾辞に揺れる）やunidic-lite未収録語で予期しない
+# 分割をすることがあり、その場合複合語名が初出と参照で食い違って見逃しが
+# 生じる。正規表現はそうした文脈依存タグに影響されない。
+# 逆に送り仮名を含む語（「切り欠き部」「取り付け部」等）は文字クラスに
+# 平仮名が無いためゼロ件になるが、これはMeCab側が正しく処理するため、
+# 置き換えではなく論理和にすることで互いの穴を埋める。
+_TERM_RUN = re.compile(r'[一-鿿々゠-ヿ０-９0-9ー]{2,}')
+_ISUREKA_REF_PAT = re.compile(r'いずれか[０-９0-9]*項')
+_DIGIT_ONLY_PAT = re.compile(r'^[０-９0-9ー]+$')
+
+
+def _strip_quant_and_formal(s):
+    """先頭の量化語（各・各々・それぞれ等）と末尾の接尾辞を剥がす。
+
+    文字列の前後一致（例：末尾が「別」なら剥がす）は「判別」「利用」のように
+    語の一部として頻出する語を壊す危険がある（「判別」の「別」と「種類別」の
+    「別」を文字列だけでは区別できない）。そこで候補文字列そのものを単体で
+    再トークナイズし、MeCab辞書が実際に独立した接尾辞・量化語と判定した
+    形態素だけを剥がす。「判別」「利用」「体系」「分類」「各種」「各国」等は
+    辞書上1語として融合しているため誤って剥がれない。
+    """
+    toks = _tokenize(s)
+    if not toks:
+        return s
+    while len(toks) > 1 and toks[0]['surf'] in _QUANT_MODS:
+        toks = toks[1:]
+    while len(toks) > 1 and toks[-1]['pos'] == '接尾辞':
+        toks = toks[:-1]
+    return ''.join(t['surf'] for t in toks)
+
+
+def _extract_term_run_nouns(text):
+    """漢字・カタカナ・全角数字の連続を素朴な技術用語チャンクとして抽出する
+    （正規表現ベース・MeCab不使用）。_collect_defined_nouns への論理和用。
+    """
+    clean = re.sub(r'前記|上記|当該|該', '', text)
+    clean = re.sub(r'請求項[０-９0-9一二三四五六七八九十１-９]+', '', clean)
+    clean = _ISUREKA_REF_PAT.sub('', clean)
+    raw = set(_TERM_RUN.findall(clean))
+    out = set()
+    for r in raw:
+        r = _strip_quant_and_formal(r)
+        if len(r) >= 2 and not _DIGIT_ONLY_PAT.match(r):
+            out.add(r)
+    return out
 
 # 動詞サポートチェック用ストップワード（助動詞的・クレーム構文骨格）
 _VERB_STOP = {
@@ -31,6 +81,7 @@ _NI_PARTICLE = {'に', 'で', 'を'}
 STOP_WORDS = {
     # 特許定型語
     "請求項", "記載", "発明", "特許", "明細書", "出願",
+    "特徴",  # 「〜を特徴とする」が全請求項末尾の定型句のため常に除外
     # 複数トークン語・品詞ルールでは判定不可の限定語
     "いずれか", "少なくとも",
     "第一", "第二", "第三",
@@ -173,12 +224,20 @@ def _extract_verb_bases(text):
 
 
 def extract_nouns_for_support(text):
-    """サポート要件チェック用の名詞抽出。品詞ベースフィルタで不適切語句を除去。"""
+    """サポート要件チェック用の名詞抽出。品詞ベースフィルタで不適切語句を除去。
+
+    MeCabベースの抽出（_collect_defined_nouns 等）に、正規表現ベースの
+    漢字・カタカナ連続抽出（_extract_term_run_nouns）を論理和で足す。
+    両者は弱点が相補的（MeCabは送り仮名語に強くPOSタグ揺れに弱い、
+    正規表現はその逆）なため、置き換えではなくORで足して見逃しを減らす。
+    """
     # 照応詞・「請求項N」を除去してから名詞句を収集
     clean = re.sub(r'前記|上記|当該|該', '', text)
     clean = re.sub(r'請求項[０-９0-9一二三四五六七八九十１-９]+', '', clean)
     clean_toks = _tokenize(clean)
-    raw_nouns = set(_collect_defined_nouns(clean_toks)) | _extract_sahen_verb_stems(clean_toks)
+    raw_nouns = (set(_collect_defined_nouns(clean_toks))
+                 | _extract_sahen_verb_stems(clean_toks)
+                 | _extract_term_run_nouns(text))
     # 品詞ベースフィルタ
     nouns = {n for n in raw_nouns if _is_valid_support_noun(n)}
     # 包含除去：別の語句に完全に含まれる短い語は削除
