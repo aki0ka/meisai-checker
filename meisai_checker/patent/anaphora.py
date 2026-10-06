@@ -52,6 +52,14 @@ _QUANT_PREFIX_SURF_PAT = re.compile(
     r'|[0-9０-９一二三四五六七八九十百幾数]+(?:つ|個|本|台|枚|組|対|群|以上|以下))$'
 )
 
+# 「それぞれ／各々」等は群参照の量化子（複数・全て等）と異なり、分配を表す
+# 演算子であるため正しい語順は後置（「前記Xのそれぞれ」）。前置の
+# 「それぞれの前記X」を群参照と同じ文言（「前記それぞれのX」等）で
+# 書き換え提案すると、不自然な日本語（「前記それぞれの」）や
+# それぞれの二重表記（「前記それぞれのXのそれぞれ」）になってしまうため、
+# この集合に該当する場合は専用の書き換え提案を出す。
+_DISTRIB_QUANT_WORDS = {'それぞれ', '各々', '夫々', '其々', 'おのおの'}
+
 def _quant_prefix_before(tokens, i):
     """tokens[i]（照応詞）の直前が「量化修飾語＋の」なら、その表層を返す。
 
@@ -743,7 +751,17 @@ def check_zenshou(claims, dep_map):
             quant = None
             if t['surf'] in _ZENSHOU_WORDS and t['surf'] not in _TOUGAI_WORDS:
                 quant = _quant_prefix_before(tokens, i)
-            if quant:
+            if quant and quant in _DISTRIB_QUANT_WORDS:
+                issues.append({
+                    'claim': num, 'level': 'warning',
+                    'word': t['surf'], 'noun': noun,
+                    'msg': (
+                        f"請求項{num}：「{quant}の{t['surf']}{noun}」は語順が不自然です。"
+                        f"「{quant}」は分配を表す演算子のため、「前記」の前ではなく後ろに置き、"
+                        f"「前記{noun}の{quant}」のように後置してください。"
+                    ),
+                })
+            elif quant:
                 issues.append({
                     'claim': num, 'level': 'warning',
                     'word': t['surf'], 'noun': noun,

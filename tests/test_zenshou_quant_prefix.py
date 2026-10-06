@@ -17,7 +17,8 @@ _TEMPLATE = '複数の端末を管理する管理部と、{}に通知する通�
 def _quant_msgs(phrase):
     issues = check_zenshou({1: _TEMPLATE.format(phrase)}, {1: []})
     return [i['msg'] for i in issues
-            if '曖昧になりやすい' in i['msg'] or '論理矛盾' in i['msg']]
+            if '曖昧になりやすい' in i['msg'] or '論理矛盾' in i['msg']
+            or '語順が不自然' in i['msg']]
 
 
 @pytest.mark.parametrize('phrase', [
@@ -48,3 +49,22 @@ def test_quant_prefix_detected(phrase):
 ])
 def test_quant_prefix_not_detected(phrase):
     assert _quant_msgs(phrase) == [], phrase
+
+
+@pytest.mark.parametrize('phrase', [
+    'それぞれの前記端末',
+    '各々の前記端末',
+    '夫々の前記端末',
+    'おのおのの前記端末',
+])
+def test_distrib_quant_prefix_suggests_postfix(phrase):
+    """それぞれ・各々等は分配演算子なので、群参照量化子（複数・各等）と
+    同じ「前記それぞれの端末」のような前置の書き換え例ではなく、
+    後置「前記端末のそれぞれ」を提案する（2026-10-06ユーザー指摘）。
+    """
+    msgs = _quant_msgs(phrase)
+    assert msgs, phrase
+    assert any('語順が不自然' in m for m in msgs), phrase
+    assert any('前記端末のそれぞれ' in m or '前記端末の各々' in m
+               or '前記端末の夫々' in m or '前記端末のおのおの' in m
+               for m in msgs), phrase
