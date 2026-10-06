@@ -837,6 +837,21 @@ def check_zenshou(claims, dep_map):
                         if any(o.distributive for o in _occs):
                             found = True
                             break
+                if found:
+                    # 後付け修飾節：「推定された当該吸気量」のように、当該Xの
+                    # 直前に連体修飾節が付いている場合、Xは既に一意に定まって
+                    # いるため絞り込みとして機能しない（前記と同じ理由、
+                    # _pre_modifier_clause_start参照）。前記側は実装済みだが
+                    # 当該側は未対応だった（2026-10-06ユーザー指摘で発見）。
+                    _mod_start = _pre_modifier_clause_start(tokens, i, _noun_end)
+                    if _mod_start is not None:
+                        mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
+                        issues.append(_pre_modifier_warning(num, t['surf'], noun, mod_text))
+                    else:
+                        _mod_start = _passive_temporal_clause_start(tokens, i)
+                        if _mod_start is not None:
+                            mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
+                            issues.append(_passive_temporal_notice(num, t['surf'], noun, mod_text))
             else:
                 # 前記・上記
                 # まず同一請求項の前方で見つかれば常にOK
