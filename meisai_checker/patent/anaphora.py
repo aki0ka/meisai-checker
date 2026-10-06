@@ -756,9 +756,13 @@ def check_zenshou(claims, dep_map):
                     'claim': num, 'level': 'warning',
                     'word': t['surf'], 'noun': noun,
                     'msg': (
-                        f"請求項{num}：「{quant}の{t['surf']}{noun}」は語順が不自然です。"
-                        f"「{quant}」は分配を表す演算子のため、「前記」の前ではなく後ろに置き、"
-                        f"「前記{noun}の{quant}」のように後置してください。"
+                        f"請求項{num}：「{quant}の{t['surf']}{noun}」は「{quant}」が"
+                        f"何を一つずつ指しているか文面だけでは特定できません。"
+                        f"「{noun}」が単数で導入されている場合、何に対する「{quant}」なのか"
+                        f"不明確になります（明確性要件のリスク）。「{noun}」が複数導入されている"
+                        f"場合も、その複数性が「{noun}」自身によるものか別の先行する複数物に"
+                        f"よるものかが文面から読み取れません。「{quant}」が指す対象を"
+                        f"明示する書き方への変更を検討してください。"
                     ),
                 })
             elif quant:
