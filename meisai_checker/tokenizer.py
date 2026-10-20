@@ -924,6 +924,18 @@ def _noun_after_zenshou(tokens, zenshou_idx):
     # 形容詞は複合名詞を形成しないため、な の有無にかかわらずスキップ
     elif t1['pos'] == '形容詞':
         k = j + 1
+        # 語幹（活用していない形）+ さ/み（名詞化接尾辞）→「暑さ」のように
+        # 形容詞由来の名詞を形成する（「赤い花」の連体形修飾とは別物）。
+        # この場合は t1 を修飾語として捨てず、後続名詞と結合した複合名詞を返す。
+        if (t1['cform'].startswith('語幹') and k < n
+                and tokens[k]['pos'] == '接尾辞'
+                and tokens[k]['surf'] in ('さ', 'み')):
+            base = t1['surf'] + tokens[k]['surf']
+            span_y = _noun_span(tokens, k + 1)
+            core = _span_to_str(span_y)
+            if core:
+                return base + core, tokens[j]['start'], span_y[-1]['end']
+            return base, tokens[j]['start'], tokens[k]['end']
         if k < n and _is_noun_tok(tokens[k]) and not _is_fugo_tok(tokens[k]):
             span_y = _noun_span(tokens, k)
             y = _span_to_str(span_y)
