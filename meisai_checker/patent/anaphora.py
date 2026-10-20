@@ -414,8 +414,14 @@ def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
         # （名詞・接尾辞）なら別の構成要素（名詞句）の終わりとみなせる。
         # 動詞の中止形に続く接続語（「変形し、かつ接触した前記C」）は同じ
         # 修飾節の一部なので対象外（接続語の直前が名詞的かどうかで区別）。
+        # 「最大となる」のように結果を表す格助詞「と」（直後が動詞「なる」）は
+        # 並列接続の「と」（「Aと指定されたB」等）と表層が同一だが並列境界では
+        # ないため、ここでは遡りを止めない。
         if (tokens[k]['surf'] in _COORD_WORDS and k >= 1
-                and tokens[k - 1]['pos'] in ('名詞', '接尾辞', '代名詞')):
+                and tokens[k - 1]['pos'] in ('名詞', '接尾辞', '代名詞')
+                and not (tokens[k]['surf'] == 'と' and k + 1 < len(tokens)
+                         and tokens[k + 1]['surf'] == 'なる'
+                         and tokens[k + 1]['pos'] == '動詞')):
             clause_start = k + 1
             break
     return clause_start
