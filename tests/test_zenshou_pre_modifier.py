@@ -66,3 +66,20 @@ def test_pre_modifier_message_truncates_long_clause():
     msgs = _pre_mod_msgs(text)
     assert len(msgs) == 1
     assert '…' in msgs[0]
+
+
+def test_pre_modifier_not_repeated_on_coordinated_non_head():
+    """並列の非先頭要素には告知を重ねない（修飾は先頭要素側で1回だけ告知）。"""
+    text = ('レンズ中心を演算する演算部と、撮像装置と、'
+            '演算された前記レンズ中心と前記撮像装置のカメラ中心との差分を記憶する記憶部とを備える、装置。')
+    msgs = _pre_mod_msgs(text)
+    assert len(msgs) == 1
+    assert '「前記撮像装置」' not in msgs[0]
+
+
+def test_pre_modifier_excludes_leading_conjunction():
+    """読点直後の節接続語「及び」は修飾節に含めない。"""
+    text = ('推奨営業活動を算定させ、及び算定させた前記推奨営業活動を出力させる、方法。')
+    msgs = _pre_mod_msgs(text)
+    assert len(msgs) == 1
+    assert '直前の修飾「算定させた」' in msgs[0]

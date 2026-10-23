@@ -278,86 +278,6 @@ def _verb_origin_suggestion(num, surf, noun):
 _COORD_WORDS = {'および', '及び', '並びに', 'ならびに', '又は', 'または', '若しくは', 'もしくは', 'と', 'や'}
 
 
-def _coordination_head_zenshou(tokens, zenshou_idx):
-    """並列チェーン（読点・接続語で連結された複数の前記/上記要素）を遡り、
-    実際に動詞修飾節を受けている先頭要素のトークン位置を返す。
-
-    「前記速度、前記位置及び前記角度の有効性」で「前記角度」から見ると、
-    直前の「及び」の前にある最も近い前記要素は「前記位置」だが、
-    「前記位置」自身も直前が読点で区切られた非先頭要素に過ぎない
-    （本当の先頭は「前記速度」）。一段階だけ遡ると「前記位置」止まりに
-    なり、「前記位置」の直前が読点のため動詞修飾節の検出に失敗する
-    （読点のみの並列は動詞修飾の連体形チェックに引っかからないため）。
-    これを避けるため、直前が接続語または読点である限り再帰的に遡る。
-    """
-    i = zenshou_idx
-    while i >= 2:
-        prev = tokens[i - 1]
-        is_sep = prev['surf'] in _COORD_WORDS or (
-            prev['pos'] == '補助記号' and prev['surf'] == '、')
-        if not is_sep:
-            break
-        found = None
-        for k in range(i - 2, -1, -1):
-            if tokens[k]['pos'] == '補助記号':
-                if tokens[k]['surf'] == '、':
-                    continue
-                break
-            if tokens[k]['surf'] in _ZENSHOU_WORDS:
-                found = k
-                break
-        if found is None:
-            break
-        i = found
-    return i
-
-
-def _preceded_by_coordinated_zenshou(tokens, zenshou_idx, noun_end=None):
-    """zenshou_idx の直前が並列接続語（及び・又は等）で、さらにその前方
-    （直近の補助記号まで）に別の前記/上記があれば True。
-
-    「前記速度及び前記位置の有効性」のように並列された複数の前記要素の
-    後にCが続く場合、「の」＋Cは並列全体（速度及び位置）に対する属性
-    であって、並列の最後の要素（位置）だけを修飾しているわけではない。
-    この場合、noun_end直後が「の」でも右側主要部ヒューリスティックによる
-    除外を適用すると、並列の最初の要素（速度）は検出されるのに最後の
-    要素（位置）だけ検出漏れになり一貫性を失う（2026-10-03発見）。
-
-    この並列リダイレクトは「のC」構造の誤帰属を避けるためだけに存在する
-    ので、noun_end 直後が実際に「の」である場合のみ True とする。
-
-    「前記センサユニットが取り付けられている前記装置及び前記装置が
-    設けられている前記販売先」「前記装置と前記装置が設けられている
-    前記販売先と前記装置に使用されている前記潤滑油の油種」のように、
-    「及び／と」の直後の前記Xがそれ自体別の節の主語・格要素（直後が
-    「が」「に」等）である場合は、1つ目の前記要素と同格の並列要素では
-    なく、単に別の節が接続語で連結されているに過ぎない。noun_end直後が
-    「の」でなければそもそも右側主要部ヒューリスティックの対象でもない
-    ので、この場合は False を返し通常の prev チェックに委ねる
-    （並列判定の誤検知：2026-10-03発見）。
-    """
-    i = zenshou_idx
-    if i < 2 or tokens[i - 1]['surf'] not in _COORD_WORDS or noun_end is None:
-        return False
-    followed_by_no = False
-    for tk in tokens[i + 1:]:
-        if tk['start'] < noun_end:
-            continue
-        followed_by_no = (tk['start'] == noun_end and tk['surf'] == 'の'
-                           and tk['pos'] == '助詞')
-        break
-    if not followed_by_no:
-        return False
-    for k in range(i - 2, -1, -1):
-        if tokens[k]['pos'] == '補助記号':
-            if tokens[k]['surf'] == '、':
-                continue
-            break
-        if tokens[k]['surf'] in _ZENSHOU_WORDS:
-            return True
-    return False
-
-
 def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
     """照応詞の直前に置かれた連体修飾節の開始トークン位置を返す（該当なければ None）。
 
@@ -366,30 +286,17 @@ def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
     主語の有無や時制・態（した/する/している等）を問わないのは、問題の
     本質が構文形式ではなく「前記/当該は先行詞を一意に選択済み（ι演算子）
     なので、その手前に置かれた連体修飾節は絞り込みとして機能しない」という
-    論理的な余剰性だから（再絞り込み不可）。過去形（〜た/だ）に限定していた
-    旧実装（_redundant_modifier_clause_start、2026-10-03に本関数へ統合）は、
-    この条件の真部分集合に過ぎないことを検証済み。
+    論理的な余剰性だから（再絞り込み不可）。
 
     「前記Aが〜した前記BのC」のように「前記B」の直後が「の」でさらに
-    名詞句が続く場合、B は当該NPの主要部ではなく後続Cの被修飾格
-    （所有格）に過ぎない。日本語は右側主要部（head-final）のため、
-    連体修飾節「〜した」は「B」ではなく最終的な主要部Cにかかる可能性が高く、
-    Bを対象とした絞り込み冗長警告は誤検知になる。noun_end が「の」の
-    直前位置と一致する場合はこのケースとみなしスキップする。
+    名詞句が続く場合、連体修飾節は右側主要部Cにかかる可能性が高いため
+    スキップする。
 
-    ただし B が並列接続語（及び等）で連結された複数前記要素の非先頭
-    要素である場合はこの除外を適用しない（_preceded_by_coordinated_zenshou
-    参照）：「のC」は並列全体への属性であり、個々の要素への所有格修飾
-    ではないため、右側主要部ヒューリスティックの前提が成り立たない。
-
-    並列の非先頭要素（「前記位置」）は直前トークンが接続語（「及び」）で
-    動詞ではないため、以下の prev チェックは先頭要素（「前記速度」）の
-    位置に読み替えて行う（修飾節は並列全体にかかっているため）。
+    並列の非先頭要素（「演算された前記A及び前記B」の前記B）は直前が接続語で
+    連体形ではないため対象外になる。修飾が並列全体にかかるか先頭要素だけに
+    かかるかは字面から決まらず、告知は先頭要素側で1回出せば足りる。
     """
     i = zenshou_idx
-    coordinated = _preceded_by_coordinated_zenshou(tokens, i, noun_end)
-    if coordinated:
-        i = _coordination_head_zenshou(tokens, i)
     if i == 0:
         return None
     prev = tokens[i - 1]
@@ -397,7 +304,7 @@ def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
         return None
     if prev['pos'] not in ('動詞', '助動詞', '形容詞'):
         return None
-    if noun_end is not None and not coordinated:
+    if noun_end is not None:
         for tk in tokens[i + 1:]:
             if tk['start'] < noun_end:
                 continue
@@ -410,13 +317,9 @@ def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
             clause_start = k + 1
             break
         # 名詞句同士の並列境界（「Aの着色剤と指定された前記B」の「と」）でも
-        # 遡りを止める。句読点がない長い請求項では、接続語の直前が名詞的
-        # （名詞・接尾辞）なら別の構成要素（名詞句）の終わりとみなせる。
-        # 動詞の中止形に続く接続語（「変形し、かつ接触した前記C」）は同じ
-        # 修飾節の一部なので対象外（接続語の直前が名詞的かどうかで区別）。
-        # 「最大となる」のように結果を表す格助詞「と」（直後が動詞「なる」）は
-        # 並列接続の「と」（「Aと指定されたB」等）と表層が同一だが並列境界では
-        # ないため、ここでは遡りを止めない。
+        # 遡りを止める。接続語の直前が名詞的なら別の構成要素の終わりとみなす。
+        # 動詞の中止形に続く接続語（「変形し、かつ接触した前記C」）は対象外。
+        # 結果の格助詞「と」（「最大となる」）は並列境界ではない。
         if (tokens[k]['surf'] in _COORD_WORDS and k >= 1
                 and tokens[k - 1]['pos'] in ('名詞', '接尾辞', '代名詞')
                 and not (tokens[k]['surf'] == 'と' and k + 1 < len(tokens)
@@ -424,6 +327,9 @@ def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
                          and tokens[k + 1]['pos'] == '動詞')):
             clause_start = k + 1
             break
+    # 読点直後の節接続語（「〜させ、及び算定させた前記X」の「及び」）は修飾節に含めない
+    while clause_start < i - 1 and tokens[clause_start]['surf'] in _COORD_WORDS:
+        clause_start += 1
     return clause_start
 
 
