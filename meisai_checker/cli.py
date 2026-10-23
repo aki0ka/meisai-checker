@@ -264,7 +264,7 @@ def main():
             return
 
         # 解析実行
-        result = analyze(norm_doc.text)
+        result = analyze(norm_doc.text, raw_text=raw_text)
         summary = _make_summary(result)
         sec = args.section
         lvl = args.level

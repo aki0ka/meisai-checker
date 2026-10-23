@@ -104,7 +104,7 @@ def patent_check_summary(text: str, source_format: str = "auto") -> str:
     }
     source_fmt = fmt_map.get(source_format, DocFormat.UNKNOWN)
     norm_doc = normalize(text, source_format=source_fmt)
-    result = analyze(norm_doc.text, _skip_blocks=True)
+    result = analyze(norm_doc.text, _skip_blocks=True, raw_text=text)
     return _dump(_make_summary(result))
 
 
@@ -132,7 +132,7 @@ def patent_check_issues(text: str, level: str = "error", milestone: str = "all",
     }
     source_fmt = fmt_map.get(source_format, DocFormat.UNKNOWN)
     norm_doc = normalize(text, source_format=source_fmt)
-    result = analyze(norm_doc.text, _skip_blocks=True)
+    result = analyze(norm_doc.text, _skip_blocks=True, raw_text=text)
     summary = _make_summary(result)
 
     _ALL_MIDS = ('m2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'tc', 'g1')
@@ -189,7 +189,7 @@ def patent_check_m3(text: str, source_format: str = "auto") -> str:
     }
     source_fmt = fmt_map.get(source_format, DocFormat.UNKNOWN)
     norm_doc = normalize(text, source_format=source_fmt)
-    result = analyze(norm_doc.text, _skip_blocks=True)
+    result = analyze(norm_doc.text, _skip_blocks=True, raw_text=text)
     errors = _filter_issues(result['issues']['m3'], 'error')
     return _dump({
         'errors': errors,
@@ -229,7 +229,7 @@ def patent_check_m4(text: str, source_format: str = "auto") -> str:
     }
     source_fmt = fmt_map.get(source_format, DocFormat.UNKNOWN)
     norm_doc = normalize(text, source_format=source_fmt)
-    result = analyze(norm_doc.text, _skip_blocks=True)
+    result = analyze(norm_doc.text, _skip_blocks=True, raw_text=text)
     issues = result['issues']['m4']
     return _dump({
         'errors':     _filter_issues(issues, 'error'),
@@ -289,9 +289,8 @@ def patent_check_m8(text: str, source_format: str = "auto") -> str:
         issues  - 書式違反リスト（check/level/msg）
         summary - エラー・警告件数サマリー
     """
-    fmt_map = {'jplatpat': DocFormat.JPLATPAT, 'filing': DocFormat.FILING, 'auto': DocFormat.UNKNOWN}
-    norm_doc = normalize(text, source_format=fmt_map.get(source_format, DocFormat.UNKNOWN))
-    issues = check_docfields(norm_doc.text)
+    # normalize() は【書類名】行を除去するため原文を渡す
+    issues = check_docfields(text)
 
     return _dump({
         'summary': {

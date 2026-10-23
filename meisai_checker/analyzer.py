@@ -79,10 +79,15 @@ from .patent.subcombination import (  # noqa: F401
 # メイン解析
 # ══════════════════════════════════════════════════════════
 
-def analyze(text, _skip_blocks=False):
-    """明細書テキストを完全解析。"""
+def analyze(text, _skip_blocks=False, raw_text=None):
+    """明細書テキストを完全解析。
+
+    raw_text: normalize() 前の原文。normalize() は【書類名】行を除去するため、
+    それに依存する M8/M9 にはこちらを渡す。
+    """
     # 改行コード正規化: CRLF→LF, CR単独→LF
     text = text.replace('\r\n', '\n').replace('\r', '\n')
+    doc_text = text if raw_text is None else raw_text.replace('\r\n', '\n').replace('\r', '\n')
     sections  = split_sections(text)
     header_memo_issues = []
     claims    = parse_claims(sections.get('claims', text), header_memo_issues)
@@ -195,7 +200,7 @@ def analyze(text, _skip_blocks=False):
     # M8: 記録項目チェック（遅延インポートで依存を分離）
     try:
         from .structure.docfields import check_docfields
-        m8_issues = check_docfields(text)
+        m8_issues = check_docfields(doc_text)
     except ImportError:
         m8_issues = []
     except Exception:
@@ -205,7 +210,7 @@ def analyze(text, _skip_blocks=False):
     # M9: 願書記録項目チェック（【書類名】特許願が含まれる場合のみ）
     try:
         from .structure.gansho import check_gansho
-        m9_issues = check_gansho(text)
+        m9_issues = check_gansho(doc_text)
     except ImportError:
         m9_issues = []
     except Exception:

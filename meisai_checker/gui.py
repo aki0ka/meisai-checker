@@ -40,7 +40,7 @@ class Api:
             # これを素通りしていたため、J-PlatPatからの貼り付け・D&Dで (57) 等を
             # 符号と誤認するM4誤検知が発生していた（2026-10-03公報スキャンで発見）。
             norm_doc = normalize(text)
-            result = analyze(norm_doc.text)
+            result = analyze(norm_doc.text, raw_text=text)
             return json.loads(json.dumps(result, default=list))
         except Exception as e:
             import traceback
