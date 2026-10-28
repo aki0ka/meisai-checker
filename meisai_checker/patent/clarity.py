@@ -274,6 +274,21 @@ def _is_correlation_expr(sentence: str) -> bool:
     return _has_change_verb(after) or any(adj in after for adj in _RELATIVE_ADJECTIVES)
 
 
+# 「XからNを増加させた」等、変化の起点を「から」で明示する表現（起点自体が比較基準）。
+# 「ことから」は理由の接続助詞なので除外し、起点と変化動詞の間に読点を挟まない
+# 同一節内（短距離）に限る。
+_ORIGIN_KARA_PAT = re.compile(r'(?<!こと)から([^、。]{0,15})', re.UNICODE)
+
+
+def _has_origin_basis(sentence: str) -> bool:
+    """変化の起点「Xから」が同一節内で変化動詞に係っていれば True。"""
+    for m in _ORIGIN_KARA_PAT.finditer(sentence):
+        seg = m.group(1) + sentence[m.end():m.end() + 6]
+        if _has_change_verb(seg):
+            return True
+    return False
+
+
 def _split_sentences(text: str) -> list[str]:
     return [s.strip() for s in re.split(r'[。．]', text) if s.strip()]
 
@@ -320,7 +335,8 @@ def _check_sentence_relative(
 
     # ③ 方向性変化動詞（比較基準または連動表現がなければ警告）
     if _has_change_verb(sentence):
-        if not (_COMPARISON_BASIS_PAT.search(sentence) or _is_correlation_expr(sentence)):
+        if not (_COMPARISON_BASIS_PAT.search(sentence) or _is_correlation_expr(sentence)
+                or _has_origin_basis(sentence)):
             m_stem = _CHANGE_VERB_STEM_PAT.search(sentence)
             m_wago = _CHANGE_WAGO_PAT.search(sentence)
             verb = (m_stem or m_wago).group(0)  # type: ignore[union-attr]

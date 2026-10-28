@@ -371,9 +371,12 @@ def _collect_fugo_suffix(tokens, start_idx):
         next_surf = next_tok['surf'] if next_tok else ''
         # 「以外」「以上」「以下」「など」等の後置語は次の要素名ではないのでサフィックスを収集する
         _alpha_allow_next = {'以外', '以上', '以下', '以内', 'など', '等', 'を', 'に', 'の', 'は', 'が', 'も', 'で', 'と', 'へ', 'より'}
+        # 「１１２ａ周り」「１２ａ側」等、名詞的接尾辞は符号に付く後置語であり
+        # 次の要素名の開始ではないので、英字サフィックスを符号として収集する
         if (next_tok is not None
                 and _is_noun_tok(next_tok)
                 and next_tok['pos1'] != '数詞'
+                and next_tok['pos'] != '接尾辞'
                 and next_surf not in _alpha_allow_next):
             # 次が名詞の場合はスキップ（要素名扱い）
             # ただしメトリクス接頭辞（ｍ→ｍＡｈ等）の場合は単位連鎖として全体を破棄

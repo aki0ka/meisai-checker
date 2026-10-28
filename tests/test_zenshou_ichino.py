@@ -140,3 +140,15 @@ def test_dai_n_no_full_noun_is_antecedent_key():
     issues = check_zenshou({1: text}, {1: []})
     nouns = {i.get('noun') for i in issues}
     assert '第１' not in nouns and '第２' not in nouns
+
+
+def test_dearu_baai_is_condition_not_definition():
+    """「Xである場合」は条件節であり定義構文ではない。「群れ」を型指定として
+    除外すると後続の「前記群れ」が先行詞なしになる（場合分けが書けなくなる）。"""
+    text = ('対象物を撮像する撮像部と、制御部と、を備え、'
+            '前記制御部は、前記対象物が複数の個体からなる群れである場合、'
+            '前記群れの中で逃走しない特定の個体を識別する、装置。')
+    claims = {1: text}
+    issues = check_zenshou(claims, {1: []})
+    assert [i for i in issues if i.get('level') == 'error'] == []
+    assert not any('定義構文' in i.get('msg', '') for i in issues)

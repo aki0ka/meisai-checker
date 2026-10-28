@@ -183,7 +183,7 @@
   ],
   [
     {
-      "count": 12,
+      "count": 11,
       "fugo": "１",
       "is_dup": false,
       "names": [
@@ -207,7 +207,7 @@
       ]
     },
     {
-      "count": 1,
+      "count": 2,
       "fugo": "１Ｌ",
       "is_dup": false,
       "names": [
@@ -247,7 +247,7 @@
       ]
     },
     {
-      "count": 8,
+      "count": 6,
       "fugo": "２５",
       "is_dup": false,
       "names": [
@@ -255,7 +255,7 @@
       ]
     },
     {
-      "count": 13,
+      "count": 15,
       "fugo": "２５Ａ",
       "is_dup": true,
       "names": [

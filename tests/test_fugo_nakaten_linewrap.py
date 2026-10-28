@@ -37,3 +37,13 @@ def test_names_equivalent_allows_known_modifier_prefix_diff():
     assert _names_equivalent('センサ', '第１のセンサ') is True
     assert _names_equivalent('センサ', '複数のセンサ') is True
     assert _names_equivalent('センサ', '一方のセンサ') is True
+
+
+def test_alpha_suffix_before_noun_suffix_is_kept():
+    """「１１２ａ周り」の「周り」は名詞的接尾辞であり次の要素名ではない。
+    英字サフィックス「ａ」を落として「回転基台軸１１２」と誤認しないこと。"""
+    text = '回転基台１１２は、回転基台軸１１２ａ周りに回転可能である。'
+    drawing_pairs, _ = _extract_elements_tokens(text)
+    pairs = {(name, fugo) for name, fugo, *_ in drawing_pairs}
+    assert ('回転基台軸', '１１２ａ') in pairs
+    assert ('回転基台軸', '１１２') not in pairs

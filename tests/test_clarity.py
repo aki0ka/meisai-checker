@@ -121,3 +121,32 @@ class TestCheckNontechnical:
         claims = {1: '処理部と記憶部とを有するデータ処理装置。'}
         issues = check_nontechnical(claims)
         assert issues == []
+
+
+# ══════════════════════════════════════════════════════════
+# 変化動詞の比較基準：起点「Xから」
+# ══════════════════════════════════════════════════════════
+
+from meisai_checker.patent.clarity import _check_sentence_relative
+
+
+class TestChangeVerbOriginBasis:
+
+    def _msgs(self, sentence):
+        return [i['msg'] for i in _check_sentence_relative(sentence, '請求項1', 'warning')]
+
+    def test_origin_kara_is_basis(self):
+        """「第１刺激から強度を増加させた」の「から」は変化の起点＝比較基準。"""
+        assert self._msgs('第１刺激から強度を増加させた刺激を与える') == []
+
+    def test_no_basis_still_warns(self):
+        assert any('増加' in m for m in self._msgs('強度を増加させた刺激を与える'))
+
+    def test_reason_kotokara_is_not_basis(self):
+        """「ことから」は理由であり起点ではない。"""
+        assert any('増加' in m for m in self._msgs('高温であることから強度を増加させる'))
+
+    def test_kara_in_other_clause_is_not_basis(self):
+        """読点を挟んだ別節の「から」は変化動詞の起点ではない。"""
+        assert any('増加' in m for m in
+                   self._msgs('外部から入力された信号を増幅し、強度を増加させる'))
