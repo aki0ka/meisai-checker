@@ -104,8 +104,9 @@ def check_repetition(sections):
             # 例: 「センサセンサ」「データデータ」
             for m in re.finditer(r'(.{2,6})\1', body):
                 repeated = m.group(1)
-                # 数字のみ・記号のみ・空白のみは除外
-                if re.match(r'^[０-９0-9\s　]+$', repeated):
+                # 文字（かな・漢字・英字）を含まない反復は除外
+                # 数字・記号・空白のみ（章立て番号「１－１－１．」等）
+                if not re.search(r'[\u3040-\u30ff\u4e00-\u9fffA-Za-zＡ-Ｚａ-ｚ]', repeated):
                     continue
                 # 「のの」は G1a（MeCab）でカバーするため除外
                 if repeated == 'の':

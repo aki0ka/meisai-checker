@@ -72,6 +72,13 @@ _MEISHO_ITEMS = [
     ('符号の説明',      '【符号の説明】',                     'optional'),
 ]
 
+# 複数回現れてよい見出し（願書の人物・物件ブロック）
+_REPEATABLE_HEADINGS = {
+    '発明者', '特許出願人', '代理人', '選任した代理人', '弁理士',
+    '住所又は居所', '氏名', '氏名又は名称', '識別番号', '物件名',
+    '電話番号', 'ファクシミリ番号', '連絡先', '国籍・地域', '持分',
+}
+
 # 段落番号を挟まずに隣接できる見出しペア（親→子）
 _NO_PARA_BETWEEN = {
     ('先行技術文献', '特許文献'),
@@ -167,8 +174,13 @@ def check_structure(text):
                 break  # 最初の逸脱のみ報告
 
     # ── 同一項目の重複チェック ──
+    # 願書の人物ブロック（発明者が複数等）は正当に繰り返されるので除外する。
+    # normalize() が【書類名】行を除去するため、上の start_line 判定では
+    # 願書部分を切り落とせないことがある。
     seen_headings = {}
     for lineno, label, _ in headings:
+        if label in _REPEATABLE_HEADINGS:
+            continue
         if label in seen_headings:
             issues.append({
                 'milestone': 'M5', 'level': 'warning',
