@@ -1250,6 +1250,12 @@ def check_fugo_setsumeisho(fugo_table, text):
     # ② 説明にあって本文にない符号
     for fugo, name in sorted(setsu_pairs.items()):
         if fugo not in body_fugos:
+            # 「外部端末９５」のようにカギカッコ内で要素名＋符号が使われている場合、
+            # 符号抽出はカギカッコ内をマスクする（UIラベル等の誤抽出防止）ため
+            # body_fugosに現れない。本文に実在するので「未使用」とは言わない。
+            if re.search(r'[「『][^」』]*' + re.escape(name) + re.escape(fugo)
+                         + r'[^」』]*[」』]', text):
+                continue
             issues.append({
                 'milestone': 'M4', 'level': 'info',
                 'msg': f'【符号の説明】の「{fugo}　{name}」が明細書本文で使用されていません',
