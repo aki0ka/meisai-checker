@@ -412,6 +412,7 @@ _DOC_ORDER_MAP: dict[str, int] = {
     '明細書': 1,
     '特許請求の範囲': 2,
     '実用新案登録請求の範囲': 2,
+    '請求の範囲': 2,  # 国際特許出願の翻訳文等（PCT）での正規名称
     '要約書': 3,
     '図面': 4,
 }
@@ -505,8 +506,18 @@ def check_docfields(text: str) -> list[dict[str, Any]]:
 
         # 必須書類の存在確認（明細書・特許請求の範囲・要約書）
         present = {name for name, _ in sections}
+        # 請求項書類の名称は出願種別で異なる：特許＝特許請求の範囲／
+        # 実用新案＝実用新案登録請求の範囲／PCT翻訳文等＝請求の範囲
+        _claims_names = ('特許請求の範囲', '実用新案登録請求の範囲', '請求の範囲')
         for req in ['明細書', '特許請求の範囲', '要約書']:
-            if req not in present:
+            if req == '特許請求の範囲':
+                if not any(n in present for n in _claims_names):
+                    issues.append({
+                        'level': 'error', 'check': 'FC0',
+                        'msg': ("【書類名】特許請求の範囲 が見つかりません（出願書類として必須です。"
+                                "国際特許出願の翻訳文の場合は「請求の範囲」）。")
+                    })
+            elif req not in present:
                 issues.append({
                     'level': 'error', 'check': 'FC0',
                     'msg': f"【書類名】{req} が見つかりません（出願書類として必須です）。"

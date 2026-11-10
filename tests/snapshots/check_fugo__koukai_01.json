@@ -1,6 +1,16 @@
 [
   [
     {
+      "detail": "offset [197, 1512]",
+      "level": "error",
+      "milestone": "M4",
+      "msg": "符号「１」に複数の要素名が対応しています：特殊ノズル・ノズル（誤記または表記ゆれの可能性）",
+      "para_ids": [
+        "p-０００６",
+        "p-０００９"
+      ]
+    },
+    {
       "detail": "offset [215, 582]",
       "level": "error",
       "milestone": "M4",
@@ -136,6 +146,12 @@
     },
     {
       "fugos": [
+        "１"
+      ],
+      "name": "特殊ノズル"
+    },
+    {
+      "fugos": [
         "７"
       ],
       "name": "装置"
@@ -158,9 +174,10 @@
     {
       "count": 13,
       "fugo": "１",
-      "is_dup": false,
+      "is_dup": true,
       "names": [
-        "ノズル"
+        "ノズル",
+        "特殊ノズル"
       ]
     },
     {

@@ -101,6 +101,25 @@ def _is_name_tok(t):
     return _is_noun_tok(t)
 
 
+def _is_adjv_compound_head(tokens, j):
+    """形状詞（ナ形容詞語幹）が直後の名詞に直結する複合語の構成要素か判定。
+
+    MeCabは「最適」「最大」系の語を形状詞と解析することがあり
+    （「最適初期刺激ＤＢ」→ 最適/形状詞 + 初期 + 刺激 + ＤＢ）、
+    _is_name_tok（名詞系のみ許容）では要素名の先頭から脱落して、
+    【符号の説明】の「最適初期刺激ＤＢ」と不一致と誤検知される。
+    「最適な〜」「最適に〜」のように助動詞・助詞を介する場合は修飾であり
+    複合語ではないため、直後が名詞系で隣接している場合のみ対象にする。
+    """
+    t = tokens[j]
+    if t['pos'] != '形状詞' or j + 1 >= len(tokens):
+        return False
+    nxt = tokens[j + 1]
+    return (t['end'] == nxt['start']
+            and nxt['pos'] != '接尾辞'
+            and _is_noun_tok(nxt))
+
+
 def _is_nakaguro_join(tokens, j):
     """中点（・）が複合名の連結記号として機能しているか判定。
 
@@ -597,7 +616,9 @@ def _extract_elements_tokens(text):
                                 _ordinal_handled = True
 
             # パターン(A): 非fugo名詞列 → 全角数詞
-            if not _ordinal_handled and _is_name_tok(t) and not _is_fugo_tok(t):
+            if (not _ordinal_handled
+                    and (_is_name_tok(t) or _is_adjv_compound_head(tokens, i))
+                    and not _is_fugo_tok(t)):
                 # 直前が図面符号トークンはスキップ
                 if i > 0 and _is_fugo_tok(tokens[i-1]):
                     i += 1
@@ -654,9 +675,11 @@ def _extract_elements_tokens(text):
                 # （凹・凸等の活用しない形容詞語幹）にも影響されない。
                 # 形式名詞（とき・ため・うち等）は要素名の核ではないので停止
                 j = i
-                while (j < n and (_is_name_tok(tokens[j]) or _is_nakaguro_join(tokens, j))
+                while (j < n and (_is_name_tok(tokens[j]) or _is_adjv_compound_head(tokens, j)
+                                  or _is_nakaguro_join(tokens, j))
                        and not _is_fugo_tok(tokens[j])
-                       and not _is_formal_noun_tok(tokens[j])
+                       and (not _is_formal_noun_tok(tokens[j])
+                            or _is_adjv_compound_head(tokens, j))
                        and tokens[j]['surf'] not in _ZENSHOU_WORDS):
                     # 全角英字1文字 + 直後が全角数字 → 変数記号（Ｖ１等）で停止
                     # 「電圧Ｖ１」の「Ｖ」で止めて「電圧Ｖ」を要素名にしない
