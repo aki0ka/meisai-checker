@@ -588,6 +588,37 @@ def _zenshou_quant_issue(num, zenshou, quant, noun, plural):
     }
 
 
+# 弁別失敗の候補：「X＋の＋N」のXが記述限定詞・一・他・別・一方・他方・序数のもの。
+# 量化子（複数の・各・全ての）は含めない（群先行警告・前記各N等の別経路）。
+_BENSETSU_CAND_PAT = re.compile(r'^(?:所定|特定|任意|一定|所望|一|他|別|一方|他方|第.{1,4})の(.+)$')
+
+
+def _bensetsu_candidates(noun, keys, dearu_pairs):
+    """短縮形「前記N」の先行詞候補（完全一致なしの場合）：X＋の＋N 形の定義名と、
+    定義構文「Nである呼称」の呼称。"""
+    cands = set()
+    for k in keys:
+        m = _BENSETSU_CAND_PAT.match(k)
+        if m and m.group(1) == noun:
+            cands.add(k)
+    for genus, named, *_ in dearu_pairs:
+        if genus == noun:
+            cands.add(named)
+    return sorted(cands)
+
+
+def _bensetsu_issue(num, zenshou, noun, cands):
+    listed = '」「'.join(cands)
+    return {
+        'claim': num, 'level': 'warning',
+        'word': zenshou, 'noun': noun,
+        'msg': (f"請求項{num}：「{zenshou}{noun}」は、先行詞の候補が複数あり特定できません"
+                f"（「{listed}」）。同じ名詞を持つ要素が複数ある場合、識別の語"
+                f"（一の・他の・第１の等）を省いた短縮形では、どれを指すか定まりません。"
+                f"識別の語を保持して「{zenshou}{cands[0]}」のように書いてください。"),
+    }
+
+
 _POST_DISTRIB_PAT = re.compile(r'^の(?:それぞれ|各々|おのおの|すべて|全て)')
 # 並列の後半（「前記Aおよび前記Bのそれぞれ」）は並列全体への分配なので対象外
 _COORD_BEFORE_PAT = re.compile(r'(?:および|及び|並びに|ならびに|又は|または|若しくは|もしくは|と|や)$')
@@ -829,6 +860,26 @@ def check_zenshou(claims, dep_map):
             noun, noun_start, _noun_end = _noun_after_zenshou(tokens, i)
             if not noun:
                 continue
+
+            # 弁別失敗：完全一致する定義名が無く、識別語（一の・他の・第Nの等）を省いた
+            # 短縮形に当たる先行詞候補が複数ある（前記・上記のみ。当該は局所スコープ）。
+            # 群として導入済みの名詞は既存の群先行警告があるため除く。
+            if (t['surf'] not in _TOUGAI_WORDS
+                    and first_seen_as_plural.get(noun) is not True
+                    and (num, noun, 'bensetsu') not in _uniqueness_seen):
+                _quick = set()
+                for _a in [num] + sorted(ancestors):
+                    _quick.update(_bensetsu_candidates(
+                        noun, claim_defined_nouns.get(_a, {}), claim_dearu_defs.get(_a, [])))
+                if len(_quick) >= 2:
+                    _scope = ancestor_tokens + tokens[:i]
+                    _defined_here = _collect_defined_nouns(_scope)
+                    if noun not in _defined_here:
+                        _cands = _bensetsu_candidates(noun, _defined_here, _find_dearu_defs(_scope))
+                        if (len(_cands) >= 2
+                                and not _preceding_clause_disambiguates(tokens, i)):
+                            _uniqueness_seen.add((num, noun, 'bensetsu'))
+                            issues.append(_bensetsu_issue(num, t['surf'], noun, _cands))
 
             # 注：位置接尾辞（側・内・上等）の除去はここでは行わない。
             # 「肌面側」のようにフルネームが先行詞として正しく定義されている場合、

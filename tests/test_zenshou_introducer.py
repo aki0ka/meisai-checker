@@ -99,3 +99,35 @@ def test_zenshou_quant_singular_warns(quant):
 def test_zenshou_quant_correct_form_is_clean():
     iss = _m3("複数の端末と、サーバとを備え、前記複数の端末のそれぞれは通信する、システム。")
     assert not [i for i in iss if "取り合い" in i["msg"] or "複数として導入されていません" in i["msg"]]
+
+
+# ---- 弁別失敗：識別語を省いた短縮形「前記N」が複数の先行詞候補に当たる ----
+
+def _bensetsu(body):
+    return [i for i in _m3(body) if "先行詞の候補が複数あり特定できません" in i["msg"]]
+
+
+@pytest.mark.parametrize("body", [
+    "所定のタイミングで保存し、第２のタイミングで消去し、前記タイミングでデータを復元する、方法。",
+    "一の端末と他の端末とを備え、前記端末は通信する、システム。",
+    "一の端末と、前記一の端末ではない端末である例外端末と、サーバとを備え、前記端末は通信する、システム。",
+])
+def test_bensetsu_ambiguous_shortened_reference_warns(body):
+    hits = _bensetsu(body)
+    assert len(hits) == 1 and hits[0]["level"] == "warning"
+
+
+@pytest.mark.parametrize("body", [
+    # 候補が1件
+    "所定のタイミングでデータを保存し、前記タイミングでデータを復元する、方法。",
+    # 識別語を保持した完全一致
+    "一の端末と他の端末とを備え、前記一の端末は通信する、システム。",
+    # 複合語は候補にしない・完全一致優先
+    "携帯端末と端末とを備え、前記端末は通信する、システム。",
+    # 参照時点では例外端末が未導入（位置を考慮）
+    "一の端末と、前記端末ではない端末である例外端末と、サーバとを備える、システム。",
+    # 群導入済みは既存の群先行警告に任せる
+    "複数の端末と、一の端末とを備え、前記端末は通信する、システム。",
+])
+def test_bensetsu_no_warning(body):
+    assert _bensetsu(body) == []
