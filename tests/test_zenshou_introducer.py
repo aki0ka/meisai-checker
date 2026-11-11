@@ -62,3 +62,18 @@ def _levels(body, needle="記述照応詞"):
 def test_description_anaphor_level(body, level):
     assert _levels(body) == [level]
     assert not [i for i in _m3(body) if i["level"] == "error"]
+
+
+# ---- 前記各N: 複数先行詞は非推奨(info)、単数先行詞は warning ----
+
+def test_zenshou_kaku_plural_antecedent_is_info():
+    iss = _m3("複数の端末と、サーバとを備え、前記各端末は通信する、システム。")
+    hits = [i for i in iss if "同じ「端末」を取り合い" in i["msg"]]
+    assert [i["level"] for i in hits] == ["info"]
+    assert not [i for i in iss if i["level"] in ("warning", "error")]
+
+
+def test_zenshou_kaku_singular_antecedent_warns():
+    iss = _m3("端末と、サーバとを備え、前記各端末は通信する、システム。")
+    hits = [i for i in iss if "複数として導入されていません" in i["msg"]]
+    assert [i["level"] for i in hits] == ["warning"]

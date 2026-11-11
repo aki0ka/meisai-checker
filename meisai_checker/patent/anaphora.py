@@ -509,6 +509,34 @@ def _description_anaphor_issue(num, zenshou, noun, mod_text, mod_tokens, scope_t
     }
 
 
+def _zenshou_kaku_issue(num, zenshou, core, plural):
+    """「前記各N」の通知。
+
+    「前記各N」は、前記（参照）と各（分配）が同じ核名詞を取り合い、各が分配する
+    ドメインが句内で明示されない。複数先行詞なら論理矛盾ではなく起草規約上の
+    非推奨（info）、単数先行詞なら分配するドメインそのものが無いので warning。
+    （理論: project_note_kaku_quantifier 2026-08-06 改訂、検証ケース C3）
+    """
+    if plural:
+        return {
+            'claim': num, 'level': 'info',
+            'word': zenshou, 'noun': core,
+            'msg': (f"請求項{num}：「{zenshou}各{core}」は、参照（{zenshou}）と分配（各）が"
+                    f"同じ「{core}」を取り合い、「各」が分配するドメインが句の中で明示されません"
+                    f"（論理矛盾ではなく起草上の非推奨）。ドメインを明示する次の書き方を"
+                    f"検討してください：「{zenshou}複数の{core}のそれぞれ」／"
+                    f"「{zenshou}複数の{core}のうちの各{core}」。"),
+        }
+    return {
+        'claim': num, 'level': 'warning',
+        'word': zenshou, 'noun': core,
+        'msg': (f"請求項{num}：「{zenshou}各{core}」の先行詞「{core}」は複数として導入されて"
+                f"いません。「各」が分配する集合（ドメイン）が無いため、分配が成立しません。"
+                f"先行詞を「複数の{core}」として導入するか、「{zenshou}{core}」に"
+                f"改めてください。"),
+    }
+
+
 _POST_DISTRIB_PAT = re.compile(r'^の(?:それぞれ|各々|おのおの|すべて|全て)')
 # 並列の後半（「前記Aおよび前記Bのそれぞれ」）は並列全体への分配なので対象外
 _COORD_BEFORE_PAT = re.compile(r'(?:および|及び|並びに|ならびに|又は|または|若しくは|もしくは|と|や)$')
@@ -994,10 +1022,19 @@ def check_zenshou(claims, dep_map):
                     _core = noun[1:]
                     if first_seen_as_plural.get(_core) is True:
                         suppressed = True
+                        if (num, noun, 'kaku') not in _uniqueness_seen:
+                            _uniqueness_seen.add((num, noun, 'kaku'))
+                            issues.append(_zenshou_kaku_issue(num, t['surf'], _core, plural=True))
                     elif _found_in_scope(_core, prefix):
                         suppressed = True
+                        if (num, noun, 'kaku') not in _uniqueness_seen:
+                            _uniqueness_seen.add((num, noun, 'kaku'))
+                            issues.append(_zenshou_kaku_issue(num, t['surf'], _core, plural=False))
                     elif len(direct_parents) <= 1 and _found_in_scope(_core, ancestor_tokens):
                         suppressed = True
+                        if (num, noun, 'kaku') not in _uniqueness_seen:
+                            _uniqueness_seen.add((num, noun, 'kaku'))
+                            issues.append(_zenshou_kaku_issue(num, t['surf'], _core, plural=False))
                     elif len(direct_parents) > 1 and any(
                             _found_in_scope(
                                 _core,
