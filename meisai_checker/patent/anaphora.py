@@ -431,6 +431,48 @@ def _followed_by_distributive_marker(body, noun_end_pos):
 
 
 # 「前記Xの各々」等、照応済み名詞句に後置で分配をかける表現
+# 導入子（新しい対象を談話に導入する語）。照応詞（既出の対象を指す語）の直後には
+# 置けない：一つの名詞句で「導入」と「参照」は両立しない（範疇の衝突）。
+# 「ある」はMeCabが動詞に誤タグする（前記ある→動詞）ためトークンではなく
+# 照応詞直後の本文文字列で判定する。「あるいは」「あると」等を除くため、
+# 「ある」「或る」の直後は名詞を構成する文字に限る。
+_INTRODUCER_AFTER_ZENSHOU_PAT = re.compile(
+    r'^(?:(?:ある|或る)(?=[\u4e00-\u9fff\u30a0-\u30ffA-Za-z0-9])'
+    r'|(?:何らか|いずれか|何れか|いづれか)の)'
+)
+
+
+def _introducer_after_zenshou(body, tokens, i):
+    """照応詞 tokens[i] の直後が導入子なら (導入子表層, 後続名詞) を返す。なければ None。"""
+    m = _INTRODUCER_AFTER_ZENSHOU_PAT.match(body[tokens[i]['end']:tokens[i]['end'] + 8])
+    if not m:
+        return None
+    intro_end = tokens[i]['end'] + m.end()
+    j = i + 1
+    while j < len(tokens) and tokens[j]['start'] < intro_end:
+        j += 1
+    noun = _span_to_str(_noun_span(tokens, j)) if j < len(tokens) else ''
+    return m.group(0), noun
+
+
+def _introducer_collision_issue(num, zenshou, intro, noun):
+    shown = f"{zenshou}{intro}{noun}"
+    example = f"{zenshou}{noun}" if noun else f"{zenshou}〇〇"
+    return {
+        'claim': num, 'level': 'warning',
+        'word': zenshou, 'noun': noun,
+        'msg': (
+            f"請求項{num}：「{shown}」は導入と参照を同時に行う書き方です。"
+            f"「{intro.rstrip('の')}」は新しい対象を導入する語、「{zenshou}」は既に導入された"
+            f"対象を指す語で、一つの名詞句で両方を行うことはできません。"
+            f"先行詞を参照するなら「{example}」とし、"
+            f"先行詞の一部を選ぶ意図なら「{zenshou}複数の{noun or '〇〇'}のうちの"
+            f"{intro.rstrip('の')}{'の' if intro.endswith('の') else ''}{noun or '〇〇'}」のように"
+            f"参照と導入を分けて書いてください。"
+        ),
+    }
+
+
 _POST_DISTRIB_PAT = re.compile(r'^の(?:それぞれ|各々|おのおの|すべて|全て)')
 # 並列の後半（「前記Aおよび前記Bのそれぞれ」）は並列全体への分配なので対象外
 _COORD_BEFORE_PAT = re.compile(r'(?:および|及び|並びに|ならびに|又は|または|若しくは|もしくは|と|や)$')
@@ -643,6 +685,13 @@ def check_zenshou(claims, dep_map):
             if t['surf'] not in _ZENSHOU_WORDS:
                 continue
             if t['surf'] == '該' and i > 0 and tokens[i-1]['surf'] == '当':
+                continue
+
+            # 導入子（ある・或る・何らかの・いずれかの）が照応詞の直後に来る
+            # 「前記あるX」は、導入と参照の範疇の衝突（形式的に誤り）。
+            _intro = _introducer_after_zenshou(body, tokens, i)
+            if _intro:
+                issues.append(_introducer_collision_issue(num, t['surf'], *_intro))
                 continue
 
             noun, noun_start, _noun_end = _noun_after_zenshou(tokens, i)
