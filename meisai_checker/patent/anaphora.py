@@ -537,6 +537,57 @@ def _zenshou_kaku_issue(num, zenshou, core, plural):
     }
 
 
+# 前記の直後に来る全称・分配の量化子（「各」は接頭辞で別経路、「複数の」は数の保存で正当）。
+# 「全て」はMeCabが形式名詞扱いにして名詞句が空になる（_FORMAL_ADVERBIAL_NOUNS）
+# ため、トークンではなく照応詞直後の本文文字列で判定する。
+_QUANT_AFTER_ZENSHOU_PAT = re.compile(r'^(全ての|すべての|全部の|それぞれの)')
+
+
+def _quant_after_zenshou(body, tokens, i):
+    """照応詞 tokens[i] の直後が全称・分配の量化子なら (量化子表層, 後続名詞) を返す。"""
+    m = _QUANT_AFTER_ZENSHOU_PAT.match(body[tokens[i]['end']:tokens[i]['end'] + 5])
+    if not m:
+        return None
+    quant_end = tokens[i]['end'] + m.end()
+    j = i + 1
+    while j < len(tokens) and tokens[j]['start'] < quant_end:
+        j += 1
+    noun = _span_to_str(_noun_span(tokens, j)) if j < len(tokens) else ''
+    if not noun:
+        return None
+    return m.group(1), noun
+
+
+def _zenshou_quant_issue(num, zenshou, quant, noun, plural):
+    """「前記全ての／それぞれのN」の通知（「前記各N」と同型。_zenshou_kaku_issue 参照）。
+
+    複数先行詞：参照と分配が同じ核名詞を取り合いドメインが句内で明示されない
+    起草上の非推奨（info）。単数先行詞：分配するドメインが無く warning。
+    """
+    shown = f"{zenshou}{quant}{noun}"
+    if plural:
+        if quant == 'それぞれの':
+            alt = f"「{zenshou}複数の{noun}のそれぞれ」"
+        else:
+            alt = f"「{zenshou}複数の{noun}の全て」／「{zenshou}複数の{noun}のうちの{quant}{noun}」"
+        return {
+            'claim': num, 'level': 'info',
+            'word': zenshou, 'noun': noun,
+            'msg': (f"請求項{num}：「{shown}」は、参照（{zenshou}）と量化（{quant.rstrip('の')}）が"
+                    f"同じ「{noun}」を取り合い、量化するドメインが句の中で明示されません"
+                    f"（論理矛盾ではなく起草上の非推奨）。ドメインを明示する次の書き方を"
+                    f"検討してください：{alt}。"),
+        }
+    return {
+        'claim': num, 'level': 'warning',
+        'word': zenshou, 'noun': noun,
+        'msg': (f"請求項{num}：「{shown}」の先行詞「{noun}」は複数として導入されていません。"
+                f"「{quant.rstrip('の')}」が量化する集合（ドメイン）が無いため、量化が成立しません。"
+                f"先行詞を「複数の{noun}」として導入するか、「{zenshou}{noun}」に"
+                f"改めてください。"),
+    }
+
+
 _POST_DISTRIB_PAT = re.compile(r'^の(?:それぞれ|各々|おのおの|すべて|全て)')
 # 並列の後半（「前記Aおよび前記Bのそれぞれ」）は並列全体への分配なので対象外
 _COORD_BEFORE_PAT = re.compile(r'(?:および|及び|並びに|ならびに|又は|または|若しくは|もしくは|と|や)$')
@@ -757,6 +808,23 @@ def check_zenshou(claims, dep_map):
             if _intro:
                 issues.append(_introducer_collision_issue(num, t['surf'], *_intro))
                 continue
+
+            # 「前記全ての／すべての／それぞれのN」（「前記各N」と同型の二重委任）
+            if t['surf'] not in _TOUGAI_WORDS:
+                _qa = _quant_after_zenshou(body, tokens, i)
+                if _qa:
+                    _quant, _qnoun = _qa
+                    _plural = first_seen_as_plural.get(_qnoun) is True
+                    _single = (not _plural) and (
+                        _found_in_scope(_qnoun, tokens[:i])
+                        or (len(direct_parents) <= 1
+                            and _found_in_scope(_qnoun, ancestor_tokens)))
+                    if ((_plural or _single)
+                            and (num, _qnoun, 'quant', _quant) not in _uniqueness_seen):
+                        _uniqueness_seen.add((num, _qnoun, 'quant', _quant))
+                        issues.append(_zenshou_quant_issue(
+                            num, t['surf'], _quant, _qnoun, plural=_plural))
+                    continue
 
             noun, noun_start, _noun_end = _noun_after_zenshou(tokens, i)
             if not noun:

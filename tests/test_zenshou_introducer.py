@@ -77,3 +77,25 @@ def test_zenshou_kaku_singular_antecedent_warns():
     iss = _m3("端末と、サーバとを備え、前記各端末は通信する、システム。")
     hits = [i for i in iss if "複数として導入されていません" in i["msg"]]
     assert [i["level"] for i in hits] == ["warning"]
+
+
+# ---- 前記全ての／すべての／それぞれのN（前記各Nと同型） ----
+
+@pytest.mark.parametrize("quant", ["全ての", "すべての", "それぞれの"])
+def test_zenshou_quant_plural_is_info(quant):
+    iss = _m3(f"複数の端末と、サーバとを備え、前記{quant}端末は通信する、システム。")
+    hits = [i for i in iss if "同じ「端末」を取り合い" in i["msg"]]
+    assert [i["level"] for i in hits] == ["info"]
+    assert not [i for i in iss if i["level"] in ("warning", "error")]
+
+
+@pytest.mark.parametrize("quant", ["全ての", "それぞれの"])
+def test_zenshou_quant_singular_warns(quant):
+    iss = _m3(f"端末と、サーバとを備え、前記{quant}端末は通信する、システム。")
+    hits = [i for i in iss if "複数として導入されていません" in i["msg"]]
+    assert [i["level"] for i in hits] == ["warning"]
+
+
+def test_zenshou_quant_correct_form_is_clean():
+    iss = _m3("複数の端末と、サーバとを備え、前記複数の端末のそれぞれは通信する、システム。")
+    assert not [i for i in iss if "取り合い" in i["msg"] or "複数として導入されていません" in i["msg"]]
