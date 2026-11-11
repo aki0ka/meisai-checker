@@ -473,6 +473,42 @@ def _introducer_collision_issue(num, zenshou, intro, noun):
     }
 
 
+def _description_anaphor_issue(num, zenshou, noun, mod_text, mod_tokens, scope_text):
+    """「前記＋修飾＋N」（記述照応詞）の通知を返す。
+
+    修飾が先行する出来事・先行詞の記述に支えられているなら info（公開記事
+    「記述は名前になれない」の立場：先行詞Nに解決した上で名称化を提案）。
+    支えが無い修飾は、先行詞に無い限定を「前記」の中で後から足すもの
+    （再絞り込み禁止）として warning。
+
+    支えの判定（近似）：修飾に含まれる内容語（2文字以上の名詞・動詞・形容詞・
+    形状詞・副詞）のいずれかが、スコープ内の前方テキストに現れるか、
+    「修飾＋N」全体が前方に現れる（全文繰り返し）。偽陽性回避のため、
+    偶然の一致で支えありと判定される側に倒す。
+    """
+    content = [x['surf'] for x in mod_tokens
+               if x['pos'] in ('名詞', '動詞', '形容詞', '形状詞', '副詞') and len(x['surf']) >= 2]
+    supported = (mod_text + noun) in scope_text or any(c in scope_text for c in content)
+    if supported:
+        return {
+            'claim': num, 'level': 'info',
+            'word': zenshou, 'noun': noun,
+            'msg': (f"請求項{num}：「{zenshou}{mod_text}{noun}」は記述照応詞です。"
+                    f"先行詞は「{noun}」として解決しますが、"
+                    f"「{noun}」に固有の名称を与える書き方への切り替えを検討してください。"),
+        }
+    return {
+        'claim': num, 'level': 'warning',
+        'word': zenshou, 'noun': noun,
+        'msg': (f"請求項{num}：「{zenshou}{mod_text}{noun}」は、先行詞「{noun}」に無い修飾"
+                f"「{mod_text}」を「{zenshou}」の中で足しています。"
+                f"「{zenshou}」は導入済みの対象の内容を指す語であり、後から限定を加えて"
+                f"絞り込むことはできません（再絞り込み禁止）。"
+                f"「{zenshou}{noun}」とするか、限定を残したい場合は先行詞の導入時に"
+                f"「{mod_text}{noun}」と書いてください。"),
+    }
+
+
 _POST_DISTRIB_PAT = re.compile(r'^の(?:それぞれ|各々|おのおの|すべて|全て)')
 # 並列の後半（「前記Aおよび前記Bのそれぞれ」）は並列全体への分配なので対象外
 _COORD_BEFORE_PAT = re.compile(r'(?:および|及び|並びに|ならびに|又は|または|若しくは|もしくは|と|や)$')
@@ -833,14 +869,11 @@ def check_zenshou(claims, dep_map):
                                     f"先に導入することを推奨します。"),
                         })
                     if verb_modified:
-                        skipped = body[zenshou_end:noun_start]
-                        issues.append({
-                            'claim': num, 'level': 'info',
-                            'word': t['surf'], 'noun': noun,
-                            'msg': (f"請求項{num}：「{t['surf']}{skipped}{noun}」は記述照応詞です。"
-                                    f"先行詞は「{noun}」として解決しますが、"
-                                    f"「{noun}」に固有の名称を与える書き方への切り替えを検討してください。"),
-                        })
+                        issues.append(_description_anaphor_issue(
+                            num, t['surf'], noun, body[zenshou_end:noun_start],
+                            [x for x in tokens[i + 1:] if x['start'] >= zenshou_end
+                             and x['end'] <= noun_start],
+                            body[:t['start']] + ''.join(claims[a] for a in sorted(ancestors))))
                     else:
                         if _verb_origin and (num, noun, 'verb_origin') not in _uniqueness_seen:
                             _uniqueness_seen.add((num, noun, 'verb_origin'))
@@ -1021,14 +1054,11 @@ def check_zenshou(claims, dep_map):
                                 f"括弧書きを省いた「{_PAREN_PAT.sub('', _bridge_src)}」で"
                                 f"先に導入することを推奨します。"),
                     })
-                skipped = body[zenshou_end:noun_start]
-                issues.append({
-                    'claim': num, 'level': 'info',
-                    'word': t['surf'], 'noun': noun,
-                    'msg': (f"請求項{num}：「{t['surf']}{skipped}{noun}」は記述照応詞です。"
-                            f"先行詞は「{noun}」として解決しますが、"
-                            f"「{noun}」に固有の名称を与える書き方への切り替えを検討してください。"),
-                })
+                issues.append(_description_anaphor_issue(
+                    num, t['surf'], noun, body[zenshou_end:noun_start],
+                    [x for x in tokens[i + 1:] if x['start'] >= zenshou_end
+                     and x['end'] <= noun_start],
+                    body[:t['start']] + ''.join(claims[a] for a in sorted(ancestors))))
             elif t['surf'] not in _TOUGAI_WORDS:
                 # 前記/上記・先行詞あり・動詞修飾なし → ブリッジ通知 + 唯一性チェック
                 if _bridge_src:

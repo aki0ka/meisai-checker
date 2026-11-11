@@ -973,6 +973,21 @@ def _noun_after_zenshou(tokens, zenshou_idx):
             if len(y) >= 2:
                 return y, span_y[0]['start'], span_y[-1]['end']
 
+    # 形容動詞語幹（名詞タグ）+ な + 名詞 → 記述照応詞（「前記高精度な処理部」型）
+    # 形状詞タグの語（新たな等）は上で処理済み。「高精度」「正確」のように
+    # 辞書上は普通名詞の語幹は、_noun_span が「な」で止まって語幹だけを先行詞
+    # として探しに行き、「前記高精度の先行詞が見つかりません」と誤報していた。
+    # 「な（助動詞）」の直後が名詞のときだけ形容動詞の連体修飾とみなす。
+    _stem_span = _noun_span(tokens, zenshou_idx + 1)
+    if _stem_span:
+        _k = zenshou_idx + 1 + len(_stem_span)
+        if (_k + 1 < n and tokens[_k]['pos'] == '助動詞' and tokens[_k]['surf'] == 'な'
+                and _is_noun_tok(tokens[_k + 1]) and not _is_fugo_tok(tokens[_k + 1])):
+            _span_y = _noun_span(tokens, _k + 1)
+            _y = _span_to_str(_span_y)
+            if len(_y) >= 2:
+                return _y, _span_y[0]['start'], _span_y[-1]['end']
+
     # 通常パターン
     span = _noun_span(tokens, zenshou_idx + 1)
     noun = _span_to_str(span)
