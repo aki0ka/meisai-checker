@@ -497,6 +497,11 @@ def _description_anaphor_issue(num, zenshou, noun, mod_text, mod_tokens, scope_t
                     f"先行詞は「{noun}」として解決しますが、"
                     f"「{noun}」に固有の名称を与える書き方への切り替えを検討してください。"),
         }
+    return _retighten_warning(num, zenshou, noun, mod_text)
+
+
+def _retighten_warning(num, zenshou, noun, mod_text):
+    """「前記＋後付け修飾＋N」：先行詞に無い修飾を前記の中で足す（再絞り込み禁止）。"""
     return {
         'claim': num, 'level': 'warning',
         'word': zenshou, 'noun': noun,
@@ -507,6 +512,11 @@ def _description_anaphor_issue(num, zenshou, noun, mod_text, mod_tokens, scope_t
                 f"「{zenshou}{noun}」とするか、限定を残したい場合は先行詞の導入時に"
                 f"「{mod_text}{noun}」と書いてください。"),
     }
+
+
+# 記述的な限定詞（「所定の」等）。先行詞が裸のNなのに「前記所定のN」と書くのは
+# 後付け修飾（再絞り込み禁止）。先行詞が「所定のN」なら名前が一致して受理される。
+_DESCRIPTIVE_LIMITER_PAT = re.compile(r'^((?:所定|特定|任意|一定|所望)の)(.{2,})$')
 
 
 def _zenshou_kaku_issue(num, zenshou, core, plural):
@@ -1189,6 +1199,15 @@ def check_zenshou(claims, dep_map):
                                   if dep_chain else "")
                     else:
                         detail = "（当該・該のスコープは従属元を含みません）"
+                    # 記述限定詞（所定の等）＋N：核名詞Nが先行詞にあれば「先行詞が無い」ではなく
+                    # 「後付け修飾（再絞り込み禁止）」が正確な理由
+                    _dm = (_DESCRIPTIVE_LIMITER_PAT.match(noun)
+                           if t['surf'] not in _TOUGAI_WORDS else None)
+                    if _dm and (_found_in_scope(_dm.group(2), tokens[:i])
+                                or _found_in_scope(_dm.group(2), ancestor_tokens)):
+                        issues.append(_retighten_warning(
+                            num, t['surf'], _dm.group(2), _dm.group(1)))
+                        continue
                     # 複合位置語ヒント：「前記基板直下」→「基板」が定義済みなら書き換えを提案
                     full_scope = ancestor_tokens + tokens[:i]
                     base, loc = _loc_compound_hint(noun, full_scope)

@@ -217,7 +217,7 @@ def _is_formal_noun_tok(t):
 
 _LIMITERS = {
     # 量化・選択
-    '複数', '一部', '他', '各', '全て', 'すべて', 'それぞれ', '一',
+    '複数', '一部', '他', '別', '各', '全て', 'すべて', 'それぞれ', '一',
     '一方', '他方', '両方', '双方', '少数', '多数', '全部',
     # 「それぞれ」の表記違い（「夫々」はMeCabが「夫」＋「々」に分割するため
     # ここでは扱えず、照応詞直前の量化子検出側で表層一致させる）
@@ -241,7 +241,11 @@ _QUANT_MODS = {
 }
 
 # ケースB: 序列修飾語（異なる符号を区別して指す）
-_ORDINAL_MODS = {'一方', '他方', '他'}
+_ORDINAL_MODS = {'一方', '他方', '他', '別'}
+
+# 「一又は複数の」の表記ゆれ（数「複数」の保存。前記側で「前記一」と断片化させない）
+_ONE_OR_PLURAL = {f'{one}{conj}複数' for one in ('一', '１', '1')
+                  for conj in ('又は', '若しくは', 'もしくは', 'あるいは', '或いは')}
 
 def _strip_quant_prefix(name_toks):
     """名詞トークン列の先頭から量化/序列修飾語を除去し核名詞列と種別を返す。
@@ -867,6 +871,19 @@ def _noun_after_zenshou(tokens, zenshou_idx):
                             and tokens[k-1]['pos1'] == '一般'):
                         return tokens[k-1]['surf'] + y, tokens[k-1]['start'], span_y[-1]['end']
                     return y, span_y[0]['start'], span_y[-1]['end']
+
+    # 「一又は複数のN」：数「複数」の保存（定義側は「複数のN」に正規化される）。
+    # 数詞「一」だけを拾って「前記一」と断片化し先行詞なし誤エラーになるのを防ぐ。
+    if t1['pos1'] == '数詞':
+        for _w in range(3, 7):  # 一|又|は|複数 / 一|若しくは|複数 等（分割数は語による）
+            if j + _w < n and tokens[j + _w - 1]['surf'] == '複数' \
+                    and ''.join(x['surf'] for x in tokens[j:j + _w]) in _ONE_OR_PLURAL \
+                    and tokens[j + _w]['surf'] == 'の':
+                _span = _noun_span(tokens, j + _w - 1)
+                _y = _span_to_str(_span)
+                if _span and len(_y) >= 2:
+                    return _y, tokens[j]['start'], _span[-1]['end']
+                break
 
     # 数詞＋「の」パターン（「一のN」等の限定量化子）
     # 「前記一のひねり操作」→「一のひねり操作」（ひねりは連用形の複合名詞
