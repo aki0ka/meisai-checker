@@ -47,11 +47,15 @@ _LETTER_START_UPPER = 'Ａ'  # FF21
 _LETTER_START_LOWER = 'ａ'  # FF41
 
 # 本文中の図参照（図１、図１Ａ 等）─ 数字部のみ capture
-_FIG_BODY_RE = re.compile(r'図([０-９0-9]+)')
+# 直前が漢字・カタカナなら複合語の一部（配置図５３７・断面図１０・ブロック図２０等の
+# 構成要素名＋符号）であって図参照ではないので除外する。「の図１」「は図１」のように
+# ひらがな・記号が直前の場合は図参照として拾う
+_NOT_COMPOUND = r'(?<![\u4e00-\u9fff々〆ァ-ヶー])'
+_FIG_BODY_RE = re.compile(_NOT_COMPOUND + r'図([０-９0-9]+)')
 # 図面の簡単な説明の図エントリ
 _FIG_DRAW_RE = re.compile(r'【図([０-９0-9]+)[Ａ-Ｚａ-ｚ]*】')
 # 図X（a）表記（全角・半角数字、全角括弧＋全角or半角英小文字）
-_FIG_PAREN_RE = re.compile(r'図([０-９0-9]+)（([ａ-ｚa-z])）')
+_FIG_PAREN_RE = re.compile(_NOT_COMPOUND + r'図([０-９0-9]+)（([ａ-ｚa-z])）')
 
 
 def _check_category(cat_name: str, entries: list[tuple[str, int, str]]) -> list[dict]:
