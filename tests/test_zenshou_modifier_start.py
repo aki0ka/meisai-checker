@@ -40,3 +40,29 @@ def test_betsu_no_name_kept_whole():
     assert _m3("別のタイミングでデータを保存し、前記別のタイミングでデータを復元する、方法。") == []
     iss = _m3("タイミングでデータを保存し、前記別のタイミングでデータを復元する、方法。")
     assert "前記別のタイミング」の先行詞" in iss[0]["msg"]
+
+
+# ---- 序数の表記ゆれ（第１／第1／第一）----
+
+@pytest.mark.parametrize("a,b", [("第１", "第1"), ("第１", "第一"), ("第一", "第１"), ("第二", "第２")])
+def test_ordinal_notation_variant_is_warning_not_missing(a, b):
+    iss = _m3(f"{a}のデータを受信し、前記{b}のデータを保存する、方法。")
+    assert [i["level"] for i in iss] == ["warning"]
+    assert "序数の表記が異なります" in iss[0]["msg"]
+    assert "見つかりません" not in iss[0]["msg"]
+
+
+@pytest.mark.parametrize("f", ["第１", "第1", "第一", "第１０"])
+def test_ordinal_same_notation_ok(f):
+    assert _m3(f"{f}のデータを受信し、前記{f}のデータを保存する、方法。") == []
+
+
+def test_ordinal_different_value_stays_error():
+    iss = _m3("第１のデータを受信し、前記第２のデータを保存する、方法。")
+    assert [i["level"] for i in iss] == ["error"]
+
+
+def test_ordinal_value():
+    from meisai_checker.patent.anaphora import _ordinal_value
+    assert [_ordinal_value(x) for x in ("１", "1", "一", "十", "十二", "二十", "２０", "第")] \
+        == [1, 1, 1, 10, 12, 20, 20, None]

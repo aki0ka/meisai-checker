@@ -514,6 +514,61 @@ def _retighten_warning(num, zenshou, noun, mod_text):
     }
 
 
+# 序数（第N）の表記ゆれ（第１／第1／第一）判定用
+_KANJI_DIGITS = {'〇': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+                 '六': 6, '七': 7, '八': 8, '九': 9}
+_ORDINAL_NAME_PAT = re.compile(r'^第([０-９0-9一二三四五六七八九十〇]+)の(.{2,})$')
+
+
+def _ordinal_value(text):
+    """序数表記を整数に直す（全角・半角数字、漢数字〜99）。読めなければ None。"""
+    t = text.translate(str.maketrans('０１２３４５６７８９', '0123456789'))
+    if t.isdigit():
+        return int(t)
+    if '十' in t:
+        head, _, tail = t.partition('十')
+        tens = _KANJI_DIGITS.get(head, 1) if head else 1
+        if head and head not in _KANJI_DIGITS:
+            return None
+        if tail and tail not in _KANJI_DIGITS:
+            return None
+        return tens * 10 + (_KANJI_DIGITS[tail] if tail else 0)
+    if all(c in _KANJI_DIGITS for c in t):
+        v = 0
+        for c in t:
+            v = v * 10 + _KANJI_DIGITS[c]
+        return v
+    return None
+
+
+def _ordinal_notation_variant(noun, scope_tokens):
+    """「前記第1のN」に対し、スコープに「第１のN」「第一のN」等、値が同じで表記だけ
+    異なる名前があれば、その先行詞側の名前を返す。無ければ None。"""
+    m = _ORDINAL_NAME_PAT.match(noun)
+    if not m:
+        return None
+    val = _ordinal_value(m.group(1))
+    if val is None:
+        return None
+    for key in _collect_defined_nouns(scope_tokens):
+        km = _ORDINAL_NAME_PAT.match(key)
+        if (km and key != noun and km.group(2) == m.group(2)
+                and _ordinal_value(km.group(1)) == val):
+            return key
+    return None
+
+
+def _ordinal_notation_warning(num, zenshou, noun, antecedent):
+    return {
+        'claim': num, 'level': 'warning',
+        'word': zenshou, 'noun': noun,
+        'msg': (f"請求項{num}：「{zenshou}{noun}」は、先行詞「{antecedent}」と序数の表記が"
+                f"異なります。同じ対象を指す意図でも、名前が一致しないと同一性を"
+                f"保証できません。「{zenshou}{antecedent}」のように、導入時の表記に"
+                f"揃えてください。"),
+    }
+
+
 # 記述的な限定詞（「所定の」等）。先行詞が裸のNなのに「前記所定のN」と書くのは
 # 後付け修飾（再絞り込み禁止）。先行詞が「所定のN」なら名前が一致して受理される。
 _DESCRIPTIVE_LIMITER_PAT = re.compile(r'^((?:所定|特定|任意|一定|所望)の)(.{2,})$')
@@ -1199,6 +1254,15 @@ def check_zenshou(claims, dep_map):
                                   if dep_chain else "")
                     else:
                         detail = "（当該・該のスコープは従属元を含みません）"
+                    # 序数の表記ゆれ（第１／第1／第一）：値が同じで表記だけ違う先行詞があれば
+                    # 「先行詞なし」ではなく表記の不一致として示す
+                    if t['surf'] not in _TOUGAI_WORDS:
+                        _ov = (_ordinal_notation_variant(noun, tokens[:i])
+                               or _ordinal_notation_variant(noun, ancestor_tokens))
+                        if _ov:
+                            issues.append(_ordinal_notation_warning(
+                                num, t['surf'], noun, _ov))
+                            continue
                     # 記述限定詞（所定の等）＋N：核名詞Nが先行詞にあれば「先行詞が無い」ではなく
                     # 「後付け修飾（再絞り込み禁止）」が正確な理由
                     _dm = (_DESCRIPTIVE_LIMITER_PAT.match(noun)
