@@ -1452,6 +1452,14 @@ def build_noun_groups(claims, dep_map, ref_hits, m3_issues):
         base = _strip_loc_suffix(noun)
         if base != noun and len(base) >= 2:
             candidates.append(base)
+        # 「防災受信盤側」のようにUniDicが「盤側」を一語化して単独トークンにならない
+        # 場合は _strip_loc_suffix が除去できない。M3本体（tokenizer の末尾位置接尾辞除去）は
+        # これを許容して照合するので、一覧側も同じ基準で基底名詞を候補に加える
+        # （しないと、M3はerrorを出さないのに一覧だけ「先行詞なし」になる不整合が出る）。
+        if noun[-1:] in _LOC_SUFFIXES_BOUNDARY and len(noun) > 2:
+            _b2 = noun[:-1]
+            if _b2 not in candidates:
+                candidates.append(_b2)
         for num in target_nums:
             body = claims.get(num)
             if body is None:
