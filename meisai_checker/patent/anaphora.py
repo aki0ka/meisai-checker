@@ -1046,14 +1046,27 @@ def check_zenshou(claims, dep_map):
                     # 分配マーカー（各／それぞれ等）を伴わず群として導入された
                     # だけの場合は対象外（分配文脈がなければ「当該N」がどの
                     # 個体を指すか定まらないため。E-type照応の成立条件）。
+                    # 判定は「直近の群の言及」で行う（2026-11-18）。遠い位置の
+                    # 「前記複数のNのそれぞれ」だけを根拠に、その後に分配語なしで
+                    # 再び群が言及された後の「当該N」まで許容すると、分配の効力範囲
+                    # （ループ変数のブロック）を越えた参照を見逃す。直近の言及が
+                    # 分配つきであるときだけ束縛変数として受ける。
                     _defined_prefix = _collect_defined_nouns(prefix)
                     _ref_prefix = _collect_distributive_refs(prefix)
+                    _mentions = []  # (トークン位置, 分配つきか)
                     for _qpfx, _ in _LEADING_QUANT_PREFIXES:
                         _key = _qpfx + noun
-                        _occs = _defined_prefix.get(_key, []) + _ref_prefix.get(_key, [])
-                        if any(o.distributive for o in _occs):
-                            found = True
-                            break
+                        for _o in _defined_prefix.get(_key, []) + _ref_prefix.get(_key, []):
+                            _mentions.append((_o.position, bool(_o.distributive)))
+                        # 分配語を伴わない「前記＋群」の参照も言及として数える
+                        _dist_pos = {_o.position for _o in _ref_prefix.get(_key, [])}
+                        for _j, _tj in enumerate(prefix):
+                            if _tj['surf'] in _ZENSHOU_WORDS:
+                                _sp = _noun_span(prefix, _j + 1)
+                                if _sp and _span_to_str(_sp) == _key:
+                                    _mentions.append((_j + 1, (_j + 1) in _dist_pos))
+                    if _mentions and max(_mentions)[1]:
+                        found = True
                 if found:
                     # 後付け修飾節：「推定された当該吸気量」のように、当該Xの
                     # 直前に連体修飾節が付いている場合、Xは既に一意に定まって

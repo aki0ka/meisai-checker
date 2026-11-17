@@ -59,3 +59,28 @@ def test_multiple_bare_intro_ok():
     text = ('光を検出する検出部と、音を検出する検出部と、を有し、'
             '前記検出部のそれぞれは、センサである、装置。')
     assert _post_distrib(text) == []
+
+
+# --- 当該Nの束縛変数回収は「直近の群の言及」が分配つきの場合に限る（2026-11-18）---
+
+def _tougai_errors(text):
+    claims = {1: text}
+    issues = check_zenshou(claims, {1: []})
+    return [i for i in issues if i.get('level') == 'error' and i.get('word') == '当該']
+
+
+def test_tougai_bound_variable_ok_when_nearest_mention_distributes():
+    """「前記複数のNのそれぞれについて…当該N」は束縛変数として許容する。"""
+    text = ('複数の子機と管理装置とを備え、前記管理装置は、前記複数の子機のそれぞれについて、'
+            '当該子機から送信された信号を受信する、システム。')
+    assert _tougai_errors(text) == []
+
+
+def test_tougai_error_when_distribution_scope_already_closed():
+    """遠い位置の「それぞれ」の後に、分配語なしで群が再び言及されたなら、
+    その後の「当該N」は分配の効力範囲の外で先行詞なし（見逃しの回帰防止）。"""
+    text = ('複数の子機と、前記複数の子機のそれぞれに対応付けて設けられた複数の表示部と、'
+            '管理装置とを備え、前記管理装置は、前記複数の子機のいずれかに対する操作に応じて'
+            '当該子機から送信された信号を受信する、システム。')
+    errs = _tougai_errors(text)
+    assert len(errs) == 1 and errs[0]['noun'] == '子機'
