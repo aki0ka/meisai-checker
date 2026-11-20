@@ -1149,7 +1149,7 @@ def check_zenshou(claims, dep_map):
                         # （「前記Aが〜した前記B」「出力された前記B」等、主語の
                         # 有無・時制を問わない）で絞り込もうとしている。
                         # 群として導入された先行詞は部分参照の意図がありうるため対象外。
-                        if (len(direct_parents) <= 1 and len(bare) <= 1 and not same_claim_dup
+                        if (len(bare) <= 1 and not same_claim_dup
                                 and first_seen_as_plural.get(noun) is not True):
                             _mod_start = _pre_modifier_clause_start(tokens, i, _noun_end)
                             if _mod_start is not None:
@@ -1369,7 +1369,7 @@ def check_zenshou(claims, dep_map):
                 # （「前記Aが〜した前記B」「出力された前記B」等、主語の
                 # 有無・時制を問わない）で絞り込もうとしている。
                 # 群として導入された先行詞は部分参照の意図がありうるため対象外。
-                if (len(direct_parents) <= 1 and len(bare) <= 1 and not same_claim_dup
+                if (len(bare) <= 1 and not same_claim_dup
                         and first_seen_as_plural.get(noun) is not True):
                     _mod_start = _pre_modifier_clause_start(tokens, i, _noun_end)
                     if _mod_start is not None:
