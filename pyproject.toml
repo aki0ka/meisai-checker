@@ -46,7 +46,7 @@ where = ["."]
 include = ["meisai_checker*"]
 
 [tool.setuptools.package-data]
-meisai_checker = ["html_template.html"]
+meisai_checker = ["html_template.html", "textcheck/variant_pairs.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

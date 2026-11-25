@@ -63,6 +63,7 @@ from .textcheck.redundant import check_redundant
 from .textcheck.punctuation import check_punctuation
 from .textcheck.deictic import check_deictic
 from .textcheck.conjunction import check_conjunction
+from .textcheck.variant_pairs import check_variant_pairs
 from .textcheck.sentence_split import check_sentence_split
 from .patent.subcombination import (  # noqa: F401
     check_subcombination,
@@ -227,6 +228,7 @@ def analyze(text, _skip_blocks=False, raw_text=None):
                  check_punctuation(sections) +
                  check_deictic(sections) +
                  check_conjunction(sections) +
+                 check_variant_pairs(sections) +
                  check_sentence_split(_raw_sections))
 
     # G1: 文法チェック（Layer 5: MeCab必須）

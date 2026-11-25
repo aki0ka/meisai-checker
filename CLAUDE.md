@@ -37,6 +37,7 @@
 | TC8 | check_deictic | textcheck/deictic.py | こそあど指示代名詞（これ・それ等）（マニュアル 7-3） |
 | TC9 | check_sentence_split | textcheck/sentence_split.py | 文中箇条書き・長いかっこ書き（マニュアル 1-3, 1-4） |
 | TC10 | check_conjunction | textcheck/conjunction.py | 「及び」「並びに」「又は」「若しくは」の表記統一（ひらがな表記を検出） |
+| TC11 | check_variant_pairs | textcheck/variant_pairs.py | 表記ゆれ（同一文書内の別表記混在）。ペア表JSON駆動・ユーザー上書き可 |
 | G1 | check_particles | grammar/particles.py | 同一助詞連続・「の」過剰連鎖（MeCab使用） |
 
 ### パッケージ構成
@@ -69,6 +70,7 @@ meisai_checker/
     deictic.py           ← check_deictic（TC8）
     sentence_split.py    ← check_sentence_split（TC9）
     conjunction.py       ← check_conjunction（TC10）
+    variant_pairs.py     ← check_variant_pairs（TC11、ペア表は variant_pairs.json）
   structure/
     abstract.py          ← check_abstract
     sections.py          ← check_structure, check_para_nums, check_midashi_numbers

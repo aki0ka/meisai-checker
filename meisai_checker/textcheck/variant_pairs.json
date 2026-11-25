@@ -1,0 +1,1003 @@
+{
+  "_doc": "TC11 表記ゆれペア表（原案）。同一文書に variants が2種類以上現れたら警告する。recommend が null のものは「どちらかに統一」とだけ出し、件数の少ない側を指摘する。pos_guard が true のものは MeCab 品詞で語義を確認してから数える（例: 等=接尾辞のみ、同等・均等は数えない）。enabled=false で無効化。ユーザー上書きは config 側の pairs.json で id 単位にマージする想定。接続語（及び/並びに/又は/若しくは）のひらがな表記は TC10 が担当するのでここには入れない。長音の有無（ユーザ/ユーザー等）は語幹正規化が要るため別ロジックで扱い、この表には入れない。 severity: strong=同じ語の純粋な表記ゆれ（warning）、soft=使い分けの可能性があるが念のため知らせる（info）。省略時は strong。 根拠資料のURLは docs/variant_pairs.md を参照。",
+  "_schema": {
+    "id": "上書き用の識別子",
+    "label": "メッセージ用の表示名",
+    "variants": "表記のリスト。regex は表面形の照合パターン（省略時は text の完全一致）",
+    "recommend": "推奨表記（根拠があるものだけ。null=件数の少ない側を指摘）",
+    "pos_guard": "true なら MeCab 品詞で確認する",
+    "exclude": "この語を含む複合語内の出現は数えない",
+    "enabled": "既定の有効・無効",
+    "note": "根拠・注意点",
+    "severity": "strong（既定、warning）／soft（念のため、info）"
+  },
+  "pairs": [
+    {
+      "id": "arakajime",
+      "label": "予め／あらかじめ",
+      "variants": [
+        {
+          "text": "予め"
+        },
+        {
+          "text": "あらかじめ"
+        }
+      ],
+      "recommend": "あらかじめ",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "note": "特許実務では「予め」も常用されるため、単独指摘はせず混在のときだけ指摘する。",
+      "kind": "mix",
+      "source": "公用文作成の考え方（令和4年文化審議会建議） Ⅰ-1(2)ア（表外訓は仮名書き）",
+      "severity": "strong"
+    },
+    {
+      "id": "kumiawase",
+      "label": "組合せ／組み合わせ",
+      "variants": [
+        {
+          "text": "組合せ"
+        },
+        {
+          "text": "組合わせ"
+        },
+        {
+          "text": "組み合わせ",
+          "regex": "組み合わせ(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "組み合せ"
+        }
+      ],
+      "recommend": "組合せ",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "note": "動詞形（組み合わせる/組み合わせた等）は本則どおりで混在の対象外。名詞形だけを数える。",
+      "kind": "mix",
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "severity": "strong"
+    },
+    {
+      "id": "nado_tou",
+      "label": "など／等",
+      "variants": [
+        {
+          "text": "など"
+        },
+        {
+          "text": "等",
+          "regex": "等(?![しいかじ価間速分方])"
+        }
+      ],
+      "recommend": null,
+      "pos_guard": true,
+      "exclude": [
+        "同等",
+        "均等",
+        "等しい",
+        "等価",
+        "等速",
+        "等間隔",
+        "等分",
+        "等方",
+        "対等",
+        "平等",
+        "高等",
+        "初等",
+        "等号",
+        "等倍",
+        "等角",
+        "等距離"
+      ],
+      "enabled": true,
+      "note": "特許では「等」が多数派だが誤りではない。「等」は接尾辞の用法のみ数える（MeCab 品詞で確認）。",
+      "kind": "mix",
+      "source": "推奨なし：公用文は「など」、特許実務は「等」で官民が割れている（建議 Ⅰ-1(3)ア）",
+      "severity": "soft"
+    },
+    {
+      "id": "subete",
+      "label": "全て／すべて",
+      "variants": [
+        {
+          "text": "全て"
+        },
+        {
+          "text": "すべて"
+        }
+      ],
+      "recommend": null,
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "note": "推奨は付けない（特許明細書では「すべて」も普通に使われるため。件数の多い側に寄せる）。",
+      "kind": "mix",
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） １(2)イ（副詞「全て」は漢字）",
+      "severity": "strong"
+    },
+    {
+      "id": "sarani",
+      "label": "更に／さらに",
+      "variants": [
+        {
+          "text": "更に"
+        },
+        {
+          "text": "さらに"
+        }
+      ],
+      "recommend": null,
+      "pos_guard": false,
+      "exclude": [
+        "更新",
+        "変更",
+        "更なる"
+      ],
+      "enabled": true,
+      "note": "接続詞と副詞で正解が変わるため推奨なし。",
+      "kind": "mix",
+      "source": "公用文作成の考え方（令和4年文化審議会建議）（接続詞「さらに」は仮名、副詞「更に」「更なる」は漢字）",
+      "severity": "soft"
+    },
+    {
+      "id": "tatoeba",
+      "label": "例えば／たとえば",
+      "variants": [
+        {
+          "text": "例えば"
+        },
+        {
+          "text": "たとえば"
+        }
+      ],
+      "recommend": null,
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "note": "推奨は付けない（件数の多い側に寄せる）。",
+      "kind": "mix",
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） １(2)イ（副詞「例えば」は漢字）",
+      "severity": "strong"
+    },
+    {
+      "id": "tadashi",
+      "label": "ただし／但し",
+      "variants": [
+        {
+          "text": "ただし"
+        },
+        {
+          "text": "但し"
+        }
+      ],
+      "recommend": "ただし",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "note": "公用文は接続詞「ただし」を仮名書き。",
+      "kind": "mix",
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） １(2)オ／公用文作成の考え方（令和4年文化審議会建議）（法令に倣い仮名）",
+      "severity": "strong"
+    },
+    {
+      "id": "shitagatte",
+      "label": "したがって／従って",
+      "variants": [
+        {
+          "text": "したがって"
+        },
+        {
+          "text": "従って",
+          "regex": "(?:^|(?<=[。、]))従って"
+        }
+      ],
+      "recommend": "したがって",
+      "pos_guard": true,
+      "exclude": [],
+      "enabled": true,
+      "note": "接続詞は仮名書きが公用文の原則。文頭・読点直後の接続詞用法だけを数える（動詞「〜に従って」は数えない）。",
+      "kind": "mix",
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） １(2)オ（接続詞は仮名）",
+      "severity": "strong"
+    },
+    {
+      "id": "katsu",
+      "label": "かつ／且つ",
+      "variants": [
+        {
+          "text": "かつ"
+        },
+        {
+          "text": "且つ"
+        }
+      ],
+      "recommend": "かつ",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "note": "法令用語・公用文は「かつ」。",
+      "kind": "mix",
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） １(2)オ／公用文作成の考え方（令和4年文化審議会建議）（法令に倣い仮名）",
+      "severity": "strong"
+    },
+    {
+      "id": "aruiwa",
+      "label": "あるいは／或いは",
+      "variants": [
+        {
+          "text": "あるいは"
+        },
+        {
+          "text": "或いは"
+        }
+      ],
+      "recommend": "あるいは",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "note": "「或いは」は常用漢字表の表外読みで仮名書きが原則。",
+      "kind": "mix",
+      "source": "公用文作成の考え方（令和4年文化審議会建議） Ⅰ-1(2)ア（表外字は仮名書き）",
+      "severity": "strong"
+    },
+    {
+      "id": "izure",
+      "label": "いずれ／何れ",
+      "variants": [
+        {
+          "text": "いずれ"
+        },
+        {
+          "text": "何れ"
+        }
+      ],
+      "recommend": "いずれ",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "note": "「いずれか」「いずれも」等。常用漢字表外の読みのため仮名書きが原則。",
+      "kind": "mix",
+      "source": "公用文作成の考え方（令和4年文化審議会建議） Ⅰ-1(3)ウ（副詞は仮名）",
+      "severity": "strong"
+    },
+    {
+      "id": "kakaru",
+      "label": "係る／かかる",
+      "variants": [
+        {
+          "text": "に係る"
+        },
+        {
+          "text": "にかかる"
+        }
+      ],
+      "recommend": null,
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "note": "使い分けの可能性があるので soft。「〜に係る発明」と「時間にかかる」は別語として使い分けられることがある。",
+      "kind": "mix",
+      "source": "意味の違う用法がある（に係る＝関係する／にかかる＝掛かる等）ため念のため指摘",
+      "severity": "soft"
+    },
+    {
+      "id": "kasho",
+      "label": "箇所／個所／か所／カ所",
+      "variants": [
+        {
+          "text": "箇所"
+        },
+        {
+          "text": "個所"
+        },
+        {
+          "text": "か所"
+        },
+        {
+          "text": "カ所"
+        },
+        {
+          "text": "ヵ所"
+        }
+      ],
+      "recommend": null,
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "note": "推奨は数字の種類で変わるため付けない（３か所／三箇所）。",
+      "kind": "mix",
+      "source": "公用文作成の考え方（令和4年文化審議会建議） Ⅰ-1(1)ケ（算用数字は「か所」、漢数字は「箇所」）",
+      "severity": "soft"
+    },
+    {
+      "id": "hitotsu",
+      "label": "一つ／1つ／ひとつ",
+      "variants": [
+        {
+          "text": "一つ"
+        },
+        {
+          "text": "1つ",
+          "regex": "[1１]つ"
+        },
+        {
+          "text": "ひとつ"
+        }
+      ],
+      "recommend": null,
+      "pos_guard": false,
+      "exclude": [
+        "一つ目"
+      ],
+      "enabled": true,
+      "note": "数字の書き分け（一つ／1つ）を意図的に行う場合があるので soft。「一つ目」は除外。",
+      "kind": "mix",
+      "source": "慣用（根拠なし）",
+      "severity": "soft"
+    },
+    {
+      "id": "uketsukeru",
+      "label": "受け付ける／受付ける",
+      "variants": [
+        {
+          "text": "受け付け"
+        },
+        {
+          "text": "受付け"
+        }
+      ],
+      "recommend": null,
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "note": "送り仮名の揺れ。名詞の「受付」単独は別扱い（数えない）。公用文は送り仮名を省く慣用が多いが、どちらも誤りではないので推奨なし。",
+      "kind": "mix",
+      "source": "規定外（186語に含まれない）",
+      "severity": "strong"
+    },
+    {
+      "id": "okonau",
+      "label": "行う／行なう",
+      "variants": [
+        {
+          "text": "行う",
+          "regex": "行う|行い(?!ま)"
+        },
+        {
+          "text": "行なう",
+          "regex": "行な[うい]"
+        }
+      ],
+      "recommend": null,
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "note": "「行う」と「行なう」の混在を指摘する。どちらを推奨とするかは保留（送り仮名の付け方・昭和48年告示の確認待ち）なので、推奨なしで件数の少ない側を指摘する。",
+      "kind": "mix",
+      "source": "推奨は保留。同一文書内の不統一のみ指摘",
+      "severity": "strong"
+    },
+    {
+      "id": "arawasu",
+      "label": "表す／表わす",
+      "variants": [
+        {
+          "text": "表す",
+          "regex": "表す(?!こと)|表し|表さ|表せ"
+        },
+        {
+          "text": "表わす",
+          "regex": "表わ[すしさせ]"
+        }
+      ],
+      "recommend": null,
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "note": "「表す」と「表わす」の混在を指摘する。推奨は保留（同上）。",
+      "kind": "mix",
+      "source": "推奨は保留。同一文書内の不統一のみ指摘",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_取付け",
+      "kind": "mix",
+      "label": "取付け／取り付け",
+      "variants": [
+        {
+          "text": "取付け",
+          "regex": "取付け(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "取り付け",
+          "regex": "取り付け(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "取付け",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（取り付ける等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_取扱い",
+      "kind": "mix",
+      "label": "取扱い／取り扱い",
+      "variants": [
+        {
+          "text": "取扱い",
+          "regex": "取扱い(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "取り扱い",
+          "regex": "取り扱い(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "取扱い",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（取り扱いる等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_申込み",
+      "kind": "mix",
+      "label": "申込み／申し込み",
+      "variants": [
+        {
+          "text": "申込み",
+          "regex": "申込み(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "申し込み",
+          "regex": "申し込み(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "申込み",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（申し込みる等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_問合せ",
+      "kind": "mix",
+      "label": "問合せ／問い合わせ",
+      "variants": [
+        {
+          "text": "問合せ",
+          "regex": "問合せ(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "問い合わせ",
+          "regex": "問い合わせ(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "問合せ",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（問い合わせる等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_引渡し",
+      "kind": "mix",
+      "label": "引渡し／引き渡し",
+      "variants": [
+        {
+          "text": "引渡し",
+          "regex": "引渡し(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "引き渡し",
+          "regex": "引き渡し(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "引渡し",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（引き渡しる等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_取消し",
+      "kind": "mix",
+      "label": "取消し／取り消し",
+      "variants": [
+        {
+          "text": "取消し",
+          "regex": "取消し(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "取り消し",
+          "regex": "取り消し(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "取消し",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（取り消しる等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_組立て",
+      "kind": "mix",
+      "label": "組立て／組み立て",
+      "variants": [
+        {
+          "text": "組立て",
+          "regex": "組立て(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "組み立て",
+          "regex": "組み立て(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "組立て",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（組み立てる等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_貼付け",
+      "kind": "mix",
+      "label": "貼付け／貼り付け",
+      "variants": [
+        {
+          "text": "貼付け",
+          "regex": "貼付け(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "貼り付け",
+          "regex": "貼り付け(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "貼付け",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（貼り付ける等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_引継ぎ",
+      "kind": "mix",
+      "label": "引継ぎ／引き継ぎ",
+      "variants": [
+        {
+          "text": "引継ぎ",
+          "regex": "引継ぎ(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "引き継ぎ",
+          "regex": "引き継ぎ(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "引継ぎ",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（引き継ぎる等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_切替え",
+      "kind": "mix",
+      "label": "切替え／切り替え",
+      "variants": [
+        {
+          "text": "切替え",
+          "regex": "切替え(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "切り替え",
+          "regex": "切り替え(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "切替え",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（切り替える等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_書換え",
+      "kind": "mix",
+      "label": "書換え／書き換え",
+      "variants": [
+        {
+          "text": "書換え",
+          "regex": "書換え(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "書き換え",
+          "regex": "書き換え(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "書換え",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（書き換える等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_受入れ",
+      "kind": "mix",
+      "label": "受入れ／受け入れ",
+      "variants": [
+        {
+          "text": "受入れ",
+          "regex": "受入れ(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "受け入れ",
+          "regex": "受け入れ(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "受入れ",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（受け入れる等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_払出し",
+      "kind": "mix",
+      "label": "払出し／払い出し",
+      "variants": [
+        {
+          "text": "払出し",
+          "regex": "払出し(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "払い出し",
+          "regex": "払い出し(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "払出し",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（払い出しる等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_呼出し",
+      "kind": "mix",
+      "label": "呼出し／呼び出し",
+      "variants": [
+        {
+          "text": "呼出し",
+          "regex": "呼出し(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "呼び出し",
+          "regex": "呼び出し(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "呼出し",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（呼び出しる等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_読替え",
+      "kind": "mix",
+      "label": "読替え／読み替え",
+      "variants": [
+        {
+          "text": "読替え",
+          "regex": "読替え(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "読み替え",
+          "regex": "読み替え(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "読替え",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（読み替える等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_割当て",
+      "kind": "mix",
+      "label": "割当て／割り当て",
+      "variants": [
+        {
+          "text": "割当て",
+          "regex": "割当て(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "割り当て",
+          "regex": "割り当て(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "割当て",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（割り当てる等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_積込み",
+      "kind": "mix",
+      "label": "積込み／積み込み",
+      "variants": [
+        {
+          "text": "積込み",
+          "regex": "積込み(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "積み込み",
+          "regex": "積み込み(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "積込み",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（積み込みる等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_乗換え",
+      "kind": "mix",
+      "label": "乗換え／乗り換え",
+      "variants": [
+        {
+          "text": "乗換え",
+          "regex": "乗換え(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "乗り換え",
+          "regex": "乗り換え(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "乗換え",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（乗り換える等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_差引き",
+      "kind": "mix",
+      "label": "差引き／差し引き",
+      "variants": [
+        {
+          "text": "差引き",
+          "regex": "差引き(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "差し引き",
+          "regex": "差し引き(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "差引き",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（差し引きる等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_受渡し",
+      "kind": "mix",
+      "label": "受渡し／受け渡し",
+      "variants": [
+        {
+          "text": "受渡し",
+          "regex": "受渡し(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "受け渡し",
+          "regex": "受け渡し(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "受渡し",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（受け渡しる等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "okuri_打合せ",
+      "kind": "mix",
+      "label": "打合せ／打ち合わせ",
+      "variants": [
+        {
+          "text": "打合せ",
+          "regex": "打合せ(?!る|て|た|ない|ま[すし]|れ)"
+        },
+        {
+          "text": "打ち合わせ",
+          "regex": "打ち合わせ(?!る|て|た|ない|ま[すし]|れ)"
+        }
+      ],
+      "recommend": "打合せ",
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） ２(1)（186語。名詞は送り仮名を省く）",
+      "note": "名詞形のみ数える。動詞形（打ち合わせる等）は本則どおりで対象外。",
+      "severity": "strong"
+    },
+    {
+      "id": "dep_katsu_tadashi",
+      "kind": "deprecated",
+      "label": "但し／且つ／或いは（仮名書き）",
+      "patterns": [
+        {
+          "text": "但し",
+          "to": "ただし"
+        },
+        {
+          "text": "且つ",
+          "to": "かつ"
+        },
+        {
+          "text": "或いは",
+          "to": "あるいは"
+        }
+      ],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） １(2)オ／公用文作成の考え方（令和4年文化審議会建議） Ⅰ-1(3)ア",
+      "note": ""
+    },
+    {
+      "id": "dep_tame",
+      "kind": "deprecated",
+      "label": "為に（仮名書き）",
+      "patterns": [
+        {
+          "text": "為に",
+          "to": "ために",
+          "regex": "(?<![一-鿿])為に"
+        }
+      ],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） １(2)キ（形式名詞は仮名）",
+      "note": ""
+    },
+    {
+      "id": "dep_youna",
+      "kind": "deprecated",
+      "label": "様な／様に（仮名書き）",
+      "patterns": [
+        {
+          "text": "様な",
+          "to": "ような",
+          "regex": "(?<![一-鿿])様な"
+        },
+        {
+          "text": "様に",
+          "to": "ように",
+          "regex": "(?<![一-鿿])様に"
+        }
+      ],
+      "enabled": true,
+      "source": "公用文作成の考え方（令和4年文化審議会建議） Ⅰ-1(3)ア（助動詞的用法は仮名）",
+      "note": ""
+    },
+    {
+      "id": "dep_dekiru",
+      "kind": "deprecated",
+      "label": "出来る（仮名書き）",
+      "patterns": [
+        {
+          "text": "出来る",
+          "to": "できる",
+          "regex": "出来(?:る|ない|ます|た|て)"
+        }
+      ],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） １(2)キ（「できる」）",
+      "note": ""
+    },
+    {
+      "id": "dep_nai_aru",
+      "kind": "deprecated",
+      "label": "無い／有る（仮名書き）",
+      "patterns": [
+        {
+          "text": "無い",
+          "to": "ない",
+          "regex": "無い"
+        },
+        {
+          "text": "有る",
+          "to": "ある",
+          "regex": "有る"
+        }
+      ],
+      "enabled": true,
+      "source": "公用文における漢字使用等について（平成22年内閣訓令第1号） １(2)キ（「ある」「ない」）",
+      "note": "「有無」「有り・無し」等の対照用法は対象外（該当表記を拾わない）。"
+    },
+    {
+      "id": "dep_hojo_doushi",
+      "kind": "deprecated",
+      "label": "〜て頂く／下さい／欲しい（補助動詞は仮名）",
+      "patterns": [
+        {
+          "text": "て頂",
+          "to": "ていただ",
+          "regex": "て頂(?=[くきいけ])"
+        },
+        {
+          "text": "て下さ",
+          "to": "てくださ",
+          "regex": "て下さ(?=[いるっ])"
+        },
+        {
+          "text": "て欲しい",
+          "to": "てほしい"
+        }
+      ],
+      "enabled": true,
+      "source": "公用文作成の考え方（令和4年文化審議会建議） Ⅰ-1(3)ア（補助的な用法は仮名）",
+      "note": ""
+    },
+    {
+      "id": "arawareru",
+      "kind": "mix",
+      "label": "現れる／現われる",
+      "variants": [
+        {
+          "text": "現れ"
+        },
+        {
+          "text": "現われ"
+        }
+      ],
+      "recommend": null,
+      "pos_guard": false,
+      "exclude": [],
+      "enabled": true,
+      "source": "推奨は保留。同一文書内の不統一のみ指摘",
+      "note": "送り仮名の付け方（昭和48年告示）の本則・許容の関係にある。推奨は保留。",
+      "severity": "strong"
+    }
+  ]
+}
