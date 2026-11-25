@@ -124,16 +124,19 @@ def _iter_body_lines(sections):
                 yield name, claim, para, body
 
 
-def check_variant_pairs(sections, pairs=None):
+def check_variant_pairs(sections, pairs=None, long_vowel=None):
     """TC11: 表記ゆれ（同一文書内の混在）チェック。
 
     sections: split_sections() の戻り値
     戻り値: issue dict のリスト
     """
+    if long_vowel is None:
+        # ペア表を明示しない通常呼び出しのときだけ長音チェックを行う
+        long_vowel = pairs is None and _long_vowel_enabled()
     if pairs is None:
         pairs = load_pairs()
     if not pairs:
-        return []
+        return check_long_vowel(sections) if long_vowel else []
 
     mix_pairs = [p for p in pairs if p.get('kind') != 'deprecated']
     dep_pairs = [p for p in pairs if p.get('kind') == 'deprecated']
@@ -229,4 +232,85 @@ def check_variant_pairs(sections, pairs=None):
         elif para:
             issue['para_id'] = para
         issues.append(issue)
+    if long_vowel:
+        issues += check_long_vowel(sections)
+    return issues
+
+
+# ── 長音の揺れ（ユーザー／ユーザ、サーバー／サーバ 等） ──────────────
+#
+# ペア表では扱えないので、カタカナ名詞の語末の長音の有無を同一文書内で照合する。
+# MeCab が複合語を分割する（ユーザーインタフェース→ユーザー＋インタフェース）ので、
+# トークン単位の語末だけを見れば足りる。語中の長音（ビル／ビール）は別語なので見ない。
+# 官（公用文作成の考え方 Ⅰ-1(3)エ：長音符号を使う）と技術文書の慣行（省略）が割れているため、
+# 推奨は付けず、件数の多い側に寄せる。
+
+_KATAKANA_TOKEN = re.compile(r'^[ァ-ヴ][ァ-ヴー]*$')
+_LONG_MIN_BASE = 3   # 語末の長音を除いた長さの下限（「ケー／ケ」等を除く）
+
+
+def _long_vowel_enabled():
+    user = _read_json(_USER_PATH)
+    return not (isinstance(user, dict) and user.get('long_vowel') is False)
+
+
+def check_long_vowel(sections):
+    """TC11b: カタカナ語の語末の長音の揺れ（同一文書内の混在）を検出する。"""
+    try:
+        from ..tokenizer import _tokenize
+    except ImportError:
+        return []
+
+    # hits[base][True=長音あり / False=なし] = [(name, claim, para, body, start, end)]
+    hits = {}
+    for name, claim, para, body in _iter_body_lines(sections):
+        try:
+            tokens = _tokenize(body)
+        except Exception:
+            return []
+        for t in tokens:
+            surf = t['surf']
+            if t['pos'] != '名詞' or not _KATAKANA_TOKEN.match(surf):
+                continue
+            has_long = surf.endswith('ー')
+            base = surf[:-1] if has_long else surf
+            if len(base) < _LONG_MIN_BASE or base.endswith('ー'):
+                continue
+            hits.setdefault(base, {}).setdefault(has_long, []).append(
+                (name, claim, para, body, t['start'], t['end']))
+
+    issues = []
+    for base, by in hits.items():
+        if len(by) < 2:
+            continue
+        forms = {True: base + 'ー', False: base}
+        counts = {k: len(v) for k, v in by.items()}
+        # 件数の多い側を残す。同数なら長音ありを残す（建議の原則）
+        keep = max(counts, key=lambda k: (counts[k], k))
+        summary = '／'.join(f'{forms[k]}（{counts[k]}件）' for k in (True, False))
+        hint = f'件数の多い「{forms[keep]}」に寄せるなど、どちらかに統一してください'
+        seen = set()
+        n = 0
+        for k, occ in by.items():
+            if k == keep:
+                continue
+            for name, claim, para, body, s_, e_ in occ:
+                anchor = claim if claim else para
+                key = (name, anchor)
+                if key in seen:
+                    continue
+                seen.add(key)
+                if n >= _MAX_ISSUES_PER_VARIANT:
+                    break
+                n += 1
+                issue = {
+                    'milestone': 'TC11', 'level': 'warning',
+                    'msg': f'表記ゆれ（長音：{forms[True]}／{forms[False]}）：{summary}。{hint}',
+                    'detail': f'「{forms[k]}」（{name}）：…{body[max(0, s_ - 10):e_ + 10]}…',
+                }
+                if claim:
+                    issue['claim'] = claim
+                elif para:
+                    issue['para_id'] = para
+                issues.append(issue)
     return issues

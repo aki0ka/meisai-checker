@@ -185,3 +185,54 @@ def test_nado_tou_is_soft():
 def test_strong_pair_is_warning():
     issues = _check(desc='【０００１】\n予め設定する。\n【０００２】\nあらかじめ設定する。')
     assert issues and issues[0]['level'] == 'warning'
+
+
+# ── 長音の揺れ ──────────────────────────────────────────
+
+from meisai_checker.textcheck.variant_pairs import check_long_vowel
+
+
+def _lv(desc):
+    return check_long_vowel({'description': desc, 'claims': '', 'abstract': ''})
+
+
+@pytest.mark.parametrize('a,b', [
+    ('ユーザー', 'ユーザ'),
+    ('サーバー', 'サーバ'),
+    ('コンピューター', 'コンピュータ'),
+    ('メモリー', 'メモリ'),
+    ('ドライバー', 'ドライバ'),
+])
+def test_long_vowel_mix_detected(a, b):
+    issues = _lv(f'【０００１】\n{a}が動作する。\n【０００２】\n{b}が動作する。')
+    assert len(issues) == 1 and issues[0]['level'] == 'warning'
+    assert '長音' in issues[0]['msg']
+
+
+def test_long_vowel_majority_kept():
+    issues = _lv('【０００１】\nサーバーが動作する。サーバーを使う。\n'
+                 '【０００２】\nサーバが動作する。')
+    assert len(issues) == 1 and '「サーバー」に寄せ' in issues[0]['msg']
+    assert issues[0]['para_id'] == 'p-０００２'
+
+
+def test_long_vowel_compound_split():
+    # 複合語は MeCab が分割するので語末の長音で照合できる
+    assert len(_lv('【０００１】\nユーザーインタフェース。\n【０００２】\nユーザインタフェース。')) == 1
+
+
+@pytest.mark.parametrize('text', [
+    'ビルとビールを比較する。',          # 語中の長音は別語
+    'サーバーとサーバーを接続する。',      # 揺れなし
+    'ケーとケを比較する。',              # 短すぎる語は対象外
+])
+def test_long_vowel_not_detected(text):
+    assert _lv('【０００１】\n' + text) == []
+
+
+def test_long_vowel_runs_in_default_call_only():
+    sections = {'description': '【０００１】\nユーザーが使う。\n【０００２】\nユーザが使う。',
+                'claims': '', 'abstract': ''}
+    assert any('長音' in i['msg'] for i in check_variant_pairs(sections))
+    assert not any('長音' in i['msg'] for i in check_variant_pairs(
+        sections, pairs=load_pairs(user_path=None)))
