@@ -35,6 +35,25 @@ def _is_kuten_exempt(line):
     return False
 
 
+_HEADING_MAX_LEN = 40
+_SENTENCE_END_RE = re.compile(
+    r'(である|であり|する|した|される|された|れる|られる|ある|いる|なる|ない|できる|'
+    r'ます|ました|です|でした|った|いた|んだ|いう|おり)$')
+
+
+def _is_heading_like(line, prev):
+    """段落末尾に置かれた見出し行（句点なし・短い・直前行が文末で閉じている）か判定。"""
+    if len(line) > _HEADING_MAX_LEN or '。' in line or '、' in line:
+        return False
+    if _SENTENCE_END_RE.search(line):  # 用言終止形は見出しでなく文末の句点漏れ
+        return False
+    if prev.endswith(('。', '」', '）', ')')) or _is_kuten_exempt(prev):
+        return True
+    # 見出しが2行連続する場合（例：「図面の簡単な説明」＋UI行「閉じる」）
+    return (len(prev) <= _HEADING_MAX_LEN and '。' not in prev and '、' not in prev
+            and not _SENTENCE_END_RE.search(prev))
+
+
 def check_kuten(sections):
     """詳細説明・請求の範囲で句点なしの文末を検出。"""
     issues = []
@@ -51,21 +70,16 @@ def check_kuten(sections):
 
         def flush_para(plines, start_lineno):
             """段落末尾の句点チェック。段落全体を1文として扱う。"""
-            # 段落内の最後の非空行
-            last = None
-            for l in reversed(plines):
-                if l.strip():
-                    last = l.strip()
-                    break
-            if last is None:
+            # 末尾の見出し行（句点を打たない章・節タイトル）を除いた最後の本文行を探す
+            body = [l.strip() for l in plines if l.strip()]
+            while len(body) > 1 and _is_heading_like(body[-1], body[-2]):
+                body.pop()
+            if not body:
                 return None
+            last = body[-1]
             if _is_kuten_exempt(last):
                 return None
-            if last.endswith('。') or last.endswith('」') or last.endswith('）'):
-                return None
-            # 「。」が段落内のどこかにあれば文末句点ありとみなす
-            full = ' '.join(l.strip() for l in plines if l.strip())
-            if '。' in full:
+            if last.endswith(('。', '」', '）', ')')):
                 return None
             return {
                 'milestone': 'M5', 'level': 'info',
