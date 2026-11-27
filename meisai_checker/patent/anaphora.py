@@ -289,8 +289,11 @@ def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
     論理的な余剰性だから（再絞り込み不可）。
 
     「前記Aが〜した前記BのC」のように「前記B」の直後が「の」でさらに
-    名詞句が続く場合、連体修飾節は右側主要部Cにかかる可能性が高いため
-    スキップする。
+    名詞句が続く場合も対象に含める（2026-11-28）。修飾がCにかかるように
+    読めても、間に前記Bが挟まるため部分的には余剰修飾の形になり、かつ
+    B・Cのどちらにかかるか二通りに読めて曖昧だから。info なので書き手に
+    考えさせる。通知文言は _following_no_head で分岐する。noun_end は
+    後方互換のため残しているが判定には使わない。
 
     並列の非先頭要素（「演算された前記A及び前記B」の前記B）は直前が接続語で
     連体形ではないため対象外になる。修飾が並列全体にかかるか先頭要素だけに
@@ -304,13 +307,6 @@ def _pre_modifier_clause_start(tokens, zenshou_idx, noun_end=None):
         return None
     if prev['pos'] not in ('動詞', '助動詞', '形容詞'):
         return None
-    if noun_end is not None:
-        for tk in tokens[i + 1:]:
-            if tk['start'] < noun_end:
-                continue
-            if tk['start'] == noun_end and tk['surf'] == 'の' and tk['pos'] == '助詞':
-                return None
-            break
     clause_start = 0
     for k in range(i - 2, -1, -1):
         if tokens[k]['pos'] == '補助記号':
@@ -752,11 +748,36 @@ def _post_distrib_cardinality_issue(num, surf, noun, scope_tokens):
     }
 
 
-def _pre_modifier_warning(num, surf, noun, mod_text):
+def _following_no_head(tokens, zenshou_idx, noun_end):
+    """前記Xの直後が「の＋名詞」なら、その名詞（先頭トークン表層）を返す。なければ None。"""
+    if noun_end is None:
+        return None
+    nxt = [tk for tk in tokens[zenshou_idx + 1:] if tk['start'] >= noun_end]
+    if len(nxt) >= 2 and nxt[0]['start'] == noun_end and nxt[0]['surf'] == 'の' \
+            and nxt[0]['pos'] == '助詞' and nxt[1]['pos'] in ('名詞', '接頭辞', '代名詞', '接尾辞') \
+            and nxt[1]['surf'] not in _ZENSHOU_WORDS:
+        # 「前記Xの前記Y」は後方の照応詞に修飾はかからない（かかれば再絞り込み）ので
+        # 二通りの読みにならず、従来の余剰修飾の文言にする
+        return nxt[1]['surf']
+    return None
+
+
+def _pre_modifier_warning(num, surf, noun, mod_text, head=None):
     # 節が長い場合（「〜であって、」を挟まない長文の連体修飾）はメッセージが
     # 読めなくなるため、照応詞に近い側を残して先頭を省略する。
     if len(mod_text) > 30:
         mod_text = '…' + mod_text[-30:]
+    if head:
+        return {
+            'claim': num, 'level': 'info',
+            'word': surf, 'noun': noun,
+            'msg': (f"請求項{num}：「{mod_text}{surf}{noun}の{head}」の修飾「{mod_text}」は、"
+                    f"「{surf}{noun}」にかかるとも「{head}」にかかるとも読めます。"
+                    f"「{surf}{noun}」にかかる場合は先行詞が一意に定まっているため"
+                    f"絞り込みとして機能せず、削除を検討してください。"
+                    f"「{head}」にかかる場合は「{surf}{noun}のうち{mod_text}{head}」のように"
+                    f"係り先が一つに定まる書き方にしてください。"),
+        }
     return {
         'claim': num, 'level': 'info',
         'word': surf, 'noun': noun,
@@ -1076,7 +1097,9 @@ def check_zenshou(claims, dep_map):
                     _mod_start = _pre_modifier_clause_start(tokens, i, _noun_end)
                     if _mod_start is not None:
                         mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
-                        issues.append(_pre_modifier_warning(num, t['surf'], noun, mod_text))
+                        issues.append(_pre_modifier_warning(
+                            num, t['surf'], noun, mod_text,
+                            _following_no_head(tokens, i, _noun_end)))
                     else:
                         _mod_start = _passive_temporal_clause_start(tokens, i)
                         if _mod_start is not None:
@@ -1154,7 +1177,9 @@ def check_zenshou(claims, dep_map):
                             _mod_start = _pre_modifier_clause_start(tokens, i, _noun_end)
                             if _mod_start is not None:
                                 mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
-                                issues.append(_pre_modifier_warning(num, t['surf'], noun, mod_text))
+                                issues.append(_pre_modifier_warning(
+                            num, t['surf'], noun, mod_text,
+                            _following_no_head(tokens, i, _noun_end)))
                             else:
                                 # 「〜された後の前記X」：受身節＋時間名詞を挟むパターン
                                 _mod_start = _passive_temporal_clause_start(tokens, i)
@@ -1374,7 +1399,9 @@ def check_zenshou(claims, dep_map):
                     _mod_start = _pre_modifier_clause_start(tokens, i, _noun_end)
                     if _mod_start is not None:
                         mod_text = body[tokens[_mod_start]['start']:tokens[i]['start']]
-                        issues.append(_pre_modifier_warning(num, t['surf'], noun, mod_text))
+                        issues.append(_pre_modifier_warning(
+                            num, t['surf'], noun, mod_text,
+                            _following_no_head(tokens, i, _noun_end)))
                     else:
                         # 「〜された後の前記X」：受身節＋時間名詞を挟むパターン
                         _mod_start = _passive_temporal_clause_start(tokens, i)
