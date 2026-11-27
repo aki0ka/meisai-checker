@@ -106,7 +106,15 @@ def check_kuten(sections):
             # 符号の説明の後に別の見出しが来たら通常モードに戻る
             if in_fugo_section and _next_heading.match(stripped):
                 in_fugo_section = False
-            if para_pat.match(stripped):
+            if _next_heading.match(stripped):
+                # 【背景技術】【図１】【化１】等、段落番号以外の隅付き括弧行は段落の区切り
+                if para_lines and not in_fugo_section:
+                    iss = flush_para(para_lines, para_start)
+                    if iss:
+                        issues.append(iss)
+                para_lines = []
+                para_start = None
+            elif para_pat.match(stripped):
                 if para_lines and not in_fugo_section:
                     iss = flush_para(para_lines, para_start)
                     if iss:
